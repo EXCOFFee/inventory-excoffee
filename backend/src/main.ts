@@ -1,0 +1,135 @@
+/**
+ * Punto de entrada principal de la aplicación InventoryPro Backend.
+ * 
+ * Este archivo inicializa la aplicación NestJS con las siguientes configuraciones:
+ * - Pipes de validación global para DTOs
+ * - Documentación Swagger/OpenAPI
+ * - Configuración CORS para permitir requests del frontend
+ * 
+ * @module main
+ */
+
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module';
+
+/**
+ * Función bootstrap que inicializa y configura la aplicación.
+ * 
+ * Configuraciones aplicadas:
+ * 1. ValidationPipe global: Valida DTOs automáticamente usando class-validator
+ * 2. CORS: Permite requests desde el frontend (configurable por entorno)
+ * 3. Swagger: Documentación interactiva de la API en /api/docs
+ * 4. Prefijo global: Todas las rutas comienzan con /api
+ */
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // ============================================
+  // CONFIGURACIÓN DE VALIDACIÓN GLOBAL
+  // ============================================
+  // Según DoD del SRS: Validación estricta de datos en el backend
+  // whitelist: true - Elimina propiedades no definidas en el DTO
+  // forbidNonWhitelisted: true - Lanza error si hay propiedades no permitidas
+  // transform: true - Transforma payloads a instancias de DTO
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
+
+  // ============================================
+  // CONFIGURACIÓN CORS
+  // ============================================
+  // Permite que el frontend React y la app móvil se comuniquen con la API
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    credentials: true,
+  });
+
+  // ============================================
+  // PREFIJO GLOBAL DE API
+  // ============================================
+  app.setGlobalPrefix('api');
+
+  // ============================================
+  // CONFIGURACIÓN DE SWAGGER (OpenAPI)
+  // ============================================
+  // Según RF del SRS: Documentación de API con Swagger
+  // Accesible en: http://localhost:3000/api/docs
+  const config = new DocumentBuilder()
+    .setTitle('InventoryPro API')
+    .setDescription(
+      `## Sistema de Gestión de Inventario Avanzado
+      
+API REST para la gestión integral y trazable de inventarios físicos.
+
+### Características principales:
+- **Autenticación JWT** con roles (Admin/Staff)
+- **CRUD de Productos** con gestión de SKU y códigos de barras
+- **Sistema Kardex** para trazabilidad de movimientos
+- **Alertas de Stock Bajo** automáticas
+- **Reportes y KPIs** de inventario
+
+### Autenticación
+Usar el endpoint \`/api/auth/login\` para obtener un token JWT.
+Incluir el token en el header: \`Authorization: Bearer <token>\`
+      `,
+    )
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Ingresa tu token JWT',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .addTag('Auth', 'Autenticación y autorización de usuarios')
+    .addTag('Users', 'Gestión de usuarios del sistema')
+    .addTag('Products', 'Catálogo de productos e inventario')
+    .addTag('Categories', 'Categorías de productos')
+    .addTag('Suppliers', 'Gestión de proveedores')
+    .addTag('Movements', 'Movimientos de inventario (Kardex)')
+    .addTag('Reports', 'Reportes y KPIs de inventario')
+    .addTag('Alerts', 'Alertas de stock bajo')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
+    },
+  });
+
+  // ============================================
+  // INICIAR SERVIDOR
+  // ============================================
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  
+  console.log(`
+  ╔════════════════════════════════════════════════════════════╗
+  ║                                                            ║
+  ║   🚀 InventoryPro Backend iniciado correctamente          ║
+  ║                                                            ║
+  ║   📡 API:      http://localhost:${port}/api                   ║
+  ║   📚 Swagger:  http://localhost:${port}/api/docs              ║
+  ║                                                            ║
+  ╚════════════════════════════════════════════════════════════╝
+  `);
+}
+
+bootstrap();

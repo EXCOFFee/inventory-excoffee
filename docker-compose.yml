@@ -1,0 +1,84 @@
+# ============================================
+# Docker Compose para InventoryPro
+# ============================================
+# Levanta todos los servicios: PostgreSQL, Backend API, Frontend
+# 
+# Uso:
+#   docker-compose up -d        # Levantar en segundo plano
+#   docker-compose down         # Detener servicios
+#   docker-compose logs -f api  # Ver logs del backend
+
+services:
+  # ============================================
+  # BASE DE DATOS - PostgreSQL
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: inventorypro-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inventory_pro
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inventorypro-network
+
+  # ============================================
+  # BACKEND - NestJS API
+  # ============================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inventorypro-api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inventory_pro?schema=public
+      JWT_SECRET: ${JWT_SECRET:-inventory-pro-super-secret-key-change-in-production}
+      JWT_EXPIRATION: 24h
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inventorypro-network
+    restart: unless-stopped
+
+  # ============================================
+  # FRONTEND - React (para producción)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: inventorypro-frontend
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - inventorypro-network
+    restart: unless-stopped
+
+# ============================================
+# VOLÚMENES Y REDES
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  inventorypro-network:
+    driver: bridge

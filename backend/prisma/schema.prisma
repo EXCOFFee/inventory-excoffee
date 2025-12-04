@@ -1,0 +1,199 @@
+// ============================================
+// PRISMA SCHEMA - InventoryPro
+// ============================================
+// Este archivo define la estructura de la base de datos PostgreSQL.
+// Incluye todas las entidades del sistema según el DER del SRS:
+// - Users: Usuarios del sistema (Admin/Staff)
+// - Categories: Categorías de productos
+// - Suppliers: Proveedores de mercancía
+// - Products: Catálogo de productos con SKU único
+// - Movements: Historial de movimientos (Kardex) para trazabilidad
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS - Tipos definidos
+// ============================================
+
+/// Roles de usuario en el sistema
+/// - ADMIN: Acceso completo (gestión de usuarios, reportes, configuración)
+/// - STAFF: Acceso limitado (movimientos, escaneo, consulta de productos)
+enum Role {
+  ADMIN
+  STAFF
+}
+
+/// Tipos de movimiento de inventario
+/// - IN: Entrada de stock (compras, devoluciones, ajustes positivos)
+/// - OUT: Salida de stock (ventas, mermas, ajustes negativos)
+enum MovementType {
+  IN
+  OUT
+}
+
+// ============================================
+// MODELOS - Entidades del Sistema
+// ============================================
+
+/// Modelo de Usuario
+/// Representa a los usuarios del sistema con autenticación JWT.
+/// Cumple con RNF03 (Seguridad): passwords hasheados con bcrypt.
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  firstName    String     @map("first_name")
+  lastName     String     @map("last_name")
+  role         Role       @default(STAFF)
+  isActive     Boolean    @default(true) @map("is_active")
+  
+  // Campos 2FA
+  twoFactorSecret  String?  @map("two_factor_secret")
+  twoFactorEnabled Boolean  @default(false) @map("two_factor_enabled")
+  
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  
+  // Relaciones: Un usuario puede registrar múltiples movimientos
+  movements    Movement[]
+  
+  @@map("users")
+  @@index([email])
+  @@index([role])
+}
+
+/// Modelo de Categoría
+/// Permite clasificar productos para mejor organización y reportes.
+model Category {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relaciones: Una categoría contiene múltiples productos
+  products    Product[]
+  
+  @@map("categories")
+  @@index([name])
+}
+
+/// Modelo de Proveedor
+/// Almacena información de proveedores para asociar a productos.
+/// Actor externo según el SRS para futuros reportes de desempeño.
+model Supplier {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  contactName String?   @map("contact_name")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relaciones: Un proveedor puede suministrar múltiples productos
+  products    Product[]
+  
+  @@map("suppliers")
+  @@index([name])
+}
+
+/// Modelo de Producto
+/// Entidad central del sistema - Maestro de datos del inventario.
+/// El SKU es la clave única de identificación (escaneado por código de barras).
+/// currentStock y minStock permiten el control de alertas (RF04).
+model Product {
+  id           String     @id @default(uuid()) @db.Uuid
+  sku          String     @unique
+  name         String
+  description  String?
+  price        Decimal    @db.Decimal(10, 2)
+  cost         Decimal    @default(0) @db.Decimal(10, 2)
+  currentStock Int        @default(0) @map("current_stock")
+  minStock     Int        @default(0) @map("min_stock")
+  maxStock     Int?       @map("max_stock")
+  imageUrl     String?    @map("image_url")
+  barcode      String?    @unique
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  
+  // Relaciones
+  categoryId   String?    @map("category_id") @db.Uuid
+  category     Category?  @relation(fields: [categoryId], references: [id])
+  
+  supplierId   String?    @map("supplier_id") @db.Uuid
+  supplier     Supplier?  @relation(fields: [supplierId], references: [id])
+  
+  // Un producto tiene múltiples movimientos (Kardex)
+  movements    Movement[]
+  
+  @@map("products")
+  @@index([sku])
+  @@index([barcode])
+  @@index([name])
+  @@index([categoryId])
+  @@index([currentStock]) // Índice para consultas de alertas de stock bajo
+}
+
+/// Modelo de Movimiento
+/// Implementa el sistema Kardex para trazabilidad completa.
+/// Cada movimiento registra: tipo, cantidad, quién lo hizo y cuándo.
+/// Cumple con el objetivo de Trazabilidad del SRS.
+model Movement {
+  id          String       @id @default(uuid()) @db.Uuid
+  type        MovementType
+  quantity    Int
+  reason      String?
+  notes       String?
+  reference   String?      // Referencia externa (ej: número de factura, orden)
+  unitCost    Decimal?     @map("unit_cost") @db.Decimal(10, 2)
+  totalCost   Decimal?     @map("total_cost") @db.Decimal(10, 2)
+  
+  // Stock antes y después del movimiento (para auditoría)
+  stockBefore Int          @map("stock_before")
+  stockAfter  Int          @map("stock_after")
+  
+  createdAt   DateTime     @default(now()) @map("created_at")
+  
+  // Relaciones
+  productId   String       @map("product_id") @db.Uuid
+  product     Product      @relation(fields: [productId], references: [id])
+  
+  userId      String       @map("user_id") @db.Uuid
+  user        User         @relation(fields: [userId], references: [id])
+  
+  @@map("movements")
+  @@index([productId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// Modelo de Alerta de Stock
+/// Registra las alertas generadas por stock bajo.
+/// Permite seguimiento de alertas enviadas y su estado.
+model StockAlert {
+  id          String    @id @default(uuid()) @db.Uuid
+  productSku  String    @map("product_sku")
+  productName String    @map("product_name")
+  currentStock Int      @map("current_stock")
+  minStock    Int       @map("min_stock")
+  emailSent   Boolean   @default(false) @map("email_sent")
+  acknowledged Boolean  @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  
+  @@map("stock_alerts")
+  @@index([createdAt])
+  @@index([acknowledged])
+}
