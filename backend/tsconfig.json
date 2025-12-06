@@ -21,6 +21,7 @@
     "noFallthroughCasesInSwitch": true,
     "preserveSymlinks": true,
     "moduleResolution": "node",
+    "types": ["jest", "node"],
     "paths": {
       "@/*": ["src/*"],
       "@modules/*": ["src/modules/*"],
@@ -28,6 +29,6 @@
       "@config/*": ["src/config/*"]
     }
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

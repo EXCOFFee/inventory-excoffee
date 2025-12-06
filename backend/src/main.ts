@@ -5,6 +5,8 @@
  * - Pipes de validación global para DTOs
  * - Documentación Swagger/OpenAPI
  * - Configuración CORS para permitir requests del frontend
+ * - Seguridad con Helmet (headers HTTP)
+ * - Rate limiting para prevenir ataques DDoS
  * 
  * @module main
  */
@@ -12,6 +14,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 /**
@@ -25,6 +28,22 @@ import { AppModule } from './app.module';
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // ============================================
+  // CONFIGURACIÓN DE SEGURIDAD (HELMET)
+  // ============================================
+  // Helmet agrega headers HTTP de seguridad:
+  // - X-Content-Type-Options: nosniff
+  // - X-Frame-Options: DENY
+  // - X-XSS-Protection: 1; mode=block
+  // - Strict-Transport-Security (HSTS)
+  // - Content-Security-Policy
+  app.use(
+    helmet({
+      contentSecurityPolicy: process.env.NODE_ENV === 'production',
+      crossOriginEmbedderPolicy: false, // Necesario para Swagger UI
+    }),
+  );
 
   // ============================================
   // CONFIGURACIÓN DE VALIDACIÓN GLOBAL
