@@ -2,8 +2,9 @@
  * Tests unitarios para authStore.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useAuthStore } from './authStore';
+import { authService } from '../api';
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -66,5 +67,59 @@ describe('authStore', () => {
   it('should have checkAuth method', () => {
     expect(useAuthStore.getState().checkAuth).toBeDefined();
     expect(typeof useAuthStore.getState().checkAuth).toBe('function');
+  });
+});
+
+describe('authStore login (contrato access_token)', () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+      requires2FA: false,
+      twoFactorToken: null,
+    });
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('guarda el token desde access_token (no undefined) tras un login exitoso', async () => {
+    // Regresión de H-08: antes se leía response.accessToken (inexistente) → token undefined.
+    const successResponse = {
+      access_token: 'real-jwt-token',
+      user: { id: '1', email: 'a@b.com', name: 'Admin', role: 'ADMIN' as const },
+    };
+    vi.spyOn(authService, 'login').mockResolvedValue(successResponse);
+    const saveSpy = vi.spyOn(authService, 'saveSession').mockImplementation(() => {});
+
+    await useAuthStore.getState().login({ email: 'a@b.com', password: 'x' });
+
+    const state = useAuthStore.getState();
+    expect(state.token).toBe('real-jwt-token');
+    expect(state.token).not.toBeUndefined();
+    expect(state.isAuthenticated).toBe(true);
+    // saveSession recibe la respuesta con access_token (no accessToken).
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ access_token: 'real-jwt-token' }));
+  });
+
+  it('entra en estado 2FA pendiente sin autenticar cuando requires2FA', async () => {
+    vi.spyOn(authService, 'login').mockResolvedValue({
+      requires2FA: true,
+      twoFactorToken: 'ephemeral-token',
+    } as never);
+
+    await useAuthStore.getState().login({ email: 'a@b.com', password: 'x' });
+
+    const state = useAuthStore.getState();
+    expect(state.requires2FA).toBe(true);
+    expect(state.twoFactorToken).toBe('ephemeral-token');
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.token).toBeNull();
   });
 });

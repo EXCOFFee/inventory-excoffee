@@ -36,17 +36,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     try {
       const response = await authService.login({ email, password });
-      
+
       if (response.requires2FA) {
         set({
           requires2FA: true,
-          tempToken: response.tempToken || null,
+          tempToken: response.twoFactorToken || null,
           isLoading: false,
         });
         return false;
       }
-      
-      const accessToken = response.accessToken || response.access_token;
+
+      const accessToken = response.access_token;
       const user = response.user;
       
       if (accessToken && user) {
@@ -87,7 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     try {
       const response = await authService.verify2FA(tempToken, code);
-      const accessToken = response.accessToken || response.access_token;
+      const accessToken = response.access_token;
       const user = response.user;
       
       if (accessToken && user) {

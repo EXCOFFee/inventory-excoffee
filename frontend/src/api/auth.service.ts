@@ -3,7 +3,13 @@
  */
 
 import apiClient from './client';
-import { User, LoginCredentials, RegisterData, AuthResponse } from '../types';
+import {
+  User,
+  LoginCredentials,
+  RegisterData,
+  LoginResponse,
+  LoginSuccessResponse,
+} from '../types';
 
 export interface TwoFactorSetup {
   secret: string;
@@ -17,18 +23,30 @@ export interface TwoFactorStatus {
 
 export const authService = {
   /**
-   * Iniciar sesión
+   * Iniciar sesión (paso 1). Puede devolver el access_token o, si el usuario tiene 2FA,
+   * `{ requires2FA, twoFactorToken }` para completar el paso 2.
    */
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const { data } = await apiClient.post<AuthResponse>('/auth/login', credentials);
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    const { data } = await apiClient.post<LoginResponse>('/auth/login', credentials);
     return data;
   },
 
   /**
-   * Registrar nuevo usuario
+   * Paso 2 del login con 2FA: envía el token efímero + el código TOTP y obtiene el access_token.
    */
-  async register(userData: RegisterData): Promise<AuthResponse> {
-    const { data } = await apiClient.post<AuthResponse>('/auth/register', userData);
+  async verify2FA(twoFactorToken: string, code: string): Promise<LoginSuccessResponse> {
+    const { data } = await apiClient.post<LoginSuccessResponse>('/auth/2fa/login', {
+      twoFactorToken,
+      code,
+    });
+    return data;
+  },
+
+  /**
+   * Registrar nuevo usuario (solo ADMIN). El backend devuelve el usuario creado, sin token.
+   */
+  async register(userData: RegisterData): Promise<User> {
+    const { data } = await apiClient.post<User>('/auth/register', userData);
     return data;
   },
 
@@ -63,10 +81,13 @@ export const authService = {
   },
 
   /**
-   * Guardar datos de sesión
+   * Guardar datos de sesión.
+   * Lee `access_token` (snake_case), que es el campo que realmente emite el backend.
+   * Antes se leía `response.accessToken` (camelCase), inexistente → se guardaba `undefined`
+   * y el login web quedaba roto (H-08 / ADR-0007).
    */
-  saveSession(response: AuthResponse): void {
-    localStorage.setItem('accessToken', response.accessToken);
+  saveSession(response: LoginSuccessResponse): void {
+    localStorage.setItem('accessToken', response.access_token);
     localStorage.setItem('user', JSON.stringify(response.user));
   },
 
