@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: InventoryPro — Contrato de Movimientos (estado objetivo)
+  version: "1.1.0"
+  description: >
+    Contrato del endpoint crítico de registro de movimientos de stock tras remediar el
+    hallazgo H-01 (race condition). Este contrato es la fuente de verdad para la tarea P0-1.
+    La garantía clave: el registro de una SALIDA es atómico respecto del stock; bajo
+    concurrencia, el sistema nunca produce stock negativo ni escrituras perdidas.
+servers:
+  - url: http://localhost:3000/api
+    description: Desarrollo local
+security:
+  - bearerAuth: []
+paths:
+  /movements:
+    post:
+      tags: [Movements]
+      summary: Registrar un movimiento de inventario (entrada o salida)
+      description: >
+        Crea un registro Kardex (Movement) y ajusta el stock del producto de forma atómica
+        dentro de una transacción. Para movimientos OUT, el decremento se realiza mediante una
+        operación condicional a nivel de base de datos (`updateMany` con `currentStock >= quantity`),
+        de modo que dos salidas concurrentes del mismo producto NO pueden dejar el stock negativo
+        ni perder actualizaciones. Si no hay stock suficiente, responde 400.
+      operationId: createMovement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementDto'
+      responses:
+        '201':
+          description: Movimiento creado y stock actualizado atómicamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementResponse'
+        '400':
+          description: >
+            Stock insuficiente para la salida (garantizado incluso bajo concurrencia), o
+            producto desactivado, o cantidad inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                stockInsuficiente:
+                  value:
+                    statusCode: 400
+                    message: "Stock insuficiente para la salida. Disponible: 3, Solicitado: 5"
+                    error: "Bad Request"
+        '401':
+          description: No autenticado.
+        '404':
+          description: El producto referenciado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /movements/product/{productId}:
+    get:
+      tags: [Movements]
+      summary: Historial Kardex de un producto
+      operationId: getProductHistory
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Producto + lista de movimientos ordenada por fecha desc.
+        '404':
+          description: Producto no encontrado.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    MovementType:
+      type: string
+      enum: [IN, OUT]
+    CreateMovementDto:
+      type: object
+      required: [productId, type, quantity]
+      properties:
+        productId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/MovementType' }
+        quantity:
+          type: integer
+          minimum: 1
+          description: Debe ser > 0 (validado por DTO).
+        reason: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        reference:
+          type: string
+          nullable: true
+          description: Referencia externa (factura, orden de compra).
+        unitCost:
+          type: number
+          format: double
+          nullable: true
+          description: Costo unitario; si se envía, totalCost = unitCost * quantity.
+    MovementResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/MovementType' }
+        quantity: { type: integer }
+        stockBefore:
+          type: integer
+          description: Stock del producto inmediatamente antes del movimiento (auditoría).
+        stockAfter:
+          type: integer
+          description: >
+            Stock resultante, derivado del valor REALMENTE persistido tras el decremento/
+            incremento atómico (no de una lectura previa en memoria).
+        unitCost: { type: number, format: double, nullable: true }
+        totalCost: { type: number, format: double, nullable: true }
+        createdAt: { type: string, format: date-time }
+        product:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            sku: { type: string }
+            name: { type: string }
+            currentStock: { type: integer }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string }
+            firstName: { type: string }
+            lastName: { type: string }
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+        error: { type: string }
