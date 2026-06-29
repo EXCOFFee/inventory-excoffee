@@ -41,12 +41,20 @@ export class MovementsController {
    * Tanto Admin como Staff pueden registrar movimientos.
    */
   @Post()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Registrar movimiento de inventario',
-    description: 'Crea un nuevo movimiento (entrada o salida) actualizando el stock del producto.',
+    description:
+      'Crea un registro Kardex y ajusta el stock del producto de forma atómica dentro de una ' +
+      'transacción. Para SALIDAS el decremento es condicional a nivel de base de datos ' +
+      '(updateMany con currentStock >= quantity), de modo que dos salidas concurrentes del ' +
+      'mismo producto nunca dejan el stock negativo ni pierden actualizaciones; si no hay stock ' +
+      'suficiente responde 400.',
   })
-  @ApiResponse({ status: 201, description: 'Movimiento registrado exitosamente' })
-  @ApiResponse({ status: 400, description: 'Stock insuficiente o datos inválidos' })
+  @ApiResponse({ status: 201, description: 'Movimiento registrado y stock actualizado atómicamente' })
+  @ApiResponse({
+    status: 400,
+    description: 'Stock insuficiente para la salida (garantizado bajo concurrencia), producto inactivo o datos inválidos',
+  })
   @ApiResponse({ status: 404, description: 'Producto no encontrado' })
   async create(
     @Body() createMovementDto: CreateMovementDto,
