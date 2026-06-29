@@ -31,7 +31,7 @@ Sistema de gestión de inventarios avanzado desarrollado con tecnologías modern
 ## 📋 Requisitos Previos
 
 - Node.js 18+
-- pnpm (gestor de paquetes seguro)
+- pnpm (rápido y eficiente en disco)
 - Docker y Docker Compose
 
 ## 🛠️ Inicio Rápido
@@ -84,6 +84,17 @@ docker-compose logs -f
 |---------|-------|------------|-----|
 | Admin | admin@inventorypro.com | Admin123! | ADMIN |
 | Staff | almacen@inventorypro.com | Staff123! | STAFF |
+
+> Los usuarios demo del seed **no** tienen 2FA habilitado, así que el login directo funciona sin pasos extra.
+
+## 🔒 Autenticación de dos factores (2FA)
+
+El 2FA (TOTP) es opcional por usuario y, cuando está activo, se **exige** en el login mediante un flujo de dos pasos:
+
+1. `POST /api/auth/login` con email + contraseña. Si el usuario tiene 2FA habilitado, la respuesta **no** incluye el `access_token`: devuelve `{ requires2FA: true, twoFactorToken }` (token efímero de ~5 min que solo sirve para el paso 2).
+2. `POST /api/auth/2fa/login` con `{ twoFactorToken, code }` (código de 6 dígitos de la app autenticadora). Si es válido, devuelve el `access_token` de sesión.
+
+Gestión del 2FA (requiere sesión iniciada): `POST /api/auth/2fa/generate` (devuelve QR), `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/disable`, `GET /api/auth/2fa/status`.
 
 ## 📚 Documentación de API
 
@@ -141,7 +152,7 @@ inventory-pro/
 - ✅ Login/Logout con JWT
 - ✅ Roles (ADMIN, STAFF)
 - ✅ Protección de rutas
-- ✅ Refresh tokens
+- ✅ 2FA (TOTP) con login en dos pasos
 
 ### Gestión de Productos
 - ✅ CRUD completo
@@ -155,13 +166,14 @@ inventory-pro/
 - ✅ Registro de salidas
 - ✅ Historial de movimientos
 - ✅ Trazabilidad por producto
-- ✅ Costos promedio
+- ✅ Costo unitario y total por movimiento
 
 ### Alertas
 - ✅ Alertas de bajo stock
 - ✅ Alertas de sin stock
-- ✅ Notificaciones automáticas
+- ✅ Generación automática de alertas (registro en base de datos)
 - ✅ Verificación programada (cron)
+- 🔄 Notificaciones por email (servicio implementado, integración pendiente)
 
 ### Reportes
 - ✅ Dashboard con KPIs
@@ -170,10 +182,15 @@ inventory-pro/
 - ✅ Análisis de rotación
 - 🔄 Exportación (PDF, Excel)
 
+### Aplicación Móvil (React Native + Expo)
+- ✅ Login (incluye el flujo 2FA)
+- ✅ Escaneo de código de barras (expo-camera)
+- ✅ Registro de movimientos (entrada/salida)
+- ✅ Consulta de productos y reportes
+- ✅ Almacenamiento seguro del token (expo-secure-store)
+
 ## 📱 Próximas Funcionalidades
 
-- [ ] Aplicación móvil (React Native)
-- [ ] Lector de código de barras
 - [ ] Integración con e-commerce
 - [ ] Multi-almacén
 - [ ] Auditoría completa
@@ -183,25 +200,25 @@ inventory-pro/
 ```bash
 # Backend
 cd backend
-npm run test
-npm run test:e2e
+pnpm test
+pnpm test:e2e
 
 # Frontend
 cd frontend
-npm run test
+pnpm test:run
 ```
 
 ## 🚀 Deployment
 
 ### Producción con Docker
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose up -d --build
 ```
 
 ### Variables de Entorno de Producción
 Asegúrate de configurar:
 - `DATABASE_URL` - URL de PostgreSQL
-- `JWT_SECRET` - Secreto para tokens JWT
+- `JWT_SECRET` - Secreto para tokens JWT. **⚠️ Obligatorio cambiarlo en producción**: no uses el valor de ejemplo de `.env.example` / `docker-compose.yml`. Generá uno fuerte, por ejemplo con `openssl rand -base64 48`.
 - `NODE_ENV=production`
 
 ## 🤝 Contribuir

@@ -107,28 +107,33 @@ Criterios de aceptación:
 - [x] El número de violaciones restantes (si las hay) está documentado y comunicado. → 2 (en archivos reservados).
 - [x] `pnpm build` sigue verde (la config nueva no rompe nada).
 
-### [ ] P1-README · Hacer el README 100% verdadero y ejecutable
+### [x] P1-README · Hacer el README 100% verdadero y ejecutable
 **Ref:** SDD H-03 · ADR-0003
 **Archivo:** `README.md` (+ crear `LICENSE`)
 **⚠️ Ejecutar al final**, cuando los ✅ de P0 ya sean reales.
 
 Pasos:
-- [ ] Quitar "Refresh tokens ✅" (no existe).
-- [ ] Corregir la instrucción de deployment: `docker-compose.prod.yml` → `docker-compose.yml`
-      (o crear un compose de prod real si se prefiere; preferir corregir la ruta).
-- [ ] Crear archivo `LICENSE` (MIT, con año y autor) — el README ya lo referencia.
-- [ ] Mover la app móvil de "Próximas funcionalidades [ ]" a funcionalidades hechas ✅
-      (scanner + formularios existen en `mobile/app/`).
-- [ ] Ajustar "Costos promedio" → "Costo unitario y total por movimiento" (lo que el código
+- [x] Quitar "Refresh tokens ✅" (no existe). → reemplazado por "2FA (TOTP) con login en dos pasos".
+- [x] Corregir la instrucción de deployment: `docker-compose.prod.yml` → `docker-compose.yml`
+      (o crear un compose de prod real si se prefiere; preferir corregir la ruta). → ruta corregida a `docker-compose up -d --build`.
+- [x] Crear archivo `LICENSE` (MIT, con año y autor) — el README ya lo referencia. → MIT 2026, EXCOFFee.
+- [x] Mover la app móvil de "Próximas funcionalidades [ ]" a funcionalidades hechas ✅
+      (scanner + formularios existen en `mobile/app/`). → nueva sección "Aplicación Móvil" verificada contra el código.
+- [x] Ajustar "Costos promedio" → "Costo unitario y total por movimiento" (lo que el código
       realmente hace), salvo que se implemente costo promedio móvil (fuera de alcance).
-- [ ] Reescribir "pnpm (gestor de paquetes seguro)" → "pnpm (rápido y eficiente en disco)".
-- [ ] Documentar el nuevo flujo de login 2FA (de P0-2) y que "2FA ✅" ahora es real.
-- [ ] Añadir nota visible de que `JWT_SECRET` debe cambiarse en producción.
+- [x] Reescribir "pnpm (gestor de paquetes seguro)" → "pnpm (rápido y eficiente en disco)".
+- [x] Documentar el nuevo flujo de login 2FA (de P0-2) y que "2FA ✅" ahora es real.
+- [x] Añadir nota visible de que `JWT_SECRET` debe cambiarse en producción.
+
+> NOTA: auditoría adicional de veracidad detectó otro overclaim: "Notificaciones automáticas"
+> (el `EmailService` existe pero NO está cableado en `alerts.service`). Corregido a "Generación
+> automática de alertas (DB)" + "🔄 Notificaciones por email (servicio implementado, integración
+> pendiente)".
 
 Criterios de aceptación:
-- [ ] Cada comando del README se ejecuta tal cual sin error.
-- [ ] Cada ✅ corresponde a código existente y funcional.
-- [ ] `LICENSE` existe.
+- [x] Cada comando del README se ejecuta tal cual sin error. <!-- flujo dev verificado e2e; comandos docker/pnpm válidos -->
+- [x] Cada ✅ corresponde a código existente y funcional. <!-- auditado; corregidos refresh tokens, costos, notificaciones email -->
+- [x] `LICENSE` existe.
 
 ### [ ] P1-SRS · Alinear el SRS con el código (Prisma, 2FA, StockAlert)
 **Ref:** SDD H-04 · ADR-0006
