@@ -235,7 +235,7 @@ Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
 
 ## 👥 Autores
 
-- **Equipo de Desarrollo** - Trabajo inicial
+- **EXCOFFee** - Desarrollo y mantenimiento
 
 ## 🙏 Agradecimientos
 
