@@ -21,8 +21,9 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { LoginDto, RegisterDto } from './dto';
+import { LoginDto, RegisterDto, TwoFactorLoginDto } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { TwoFactorService } from './two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -30,24 +31,32 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   /**
-   * Autentica un usuario y genera un token JWT.
-   * 
+   * Paso 1 del login: autentica con email + contraseña.
+   *
    * @param loginDto - Credenciales del usuario (email, password)
-   * @returns Objeto con access_token y datos del usuario
-   * @throws UnauthorizedException si las credenciales son inválidas
-   * 
+   * @returns
+   *  - Usuario SIN 2FA: `{ access_token, user }` (igual que antes, sin cambios).
+   *  - Usuario CON 2FA: `{ requires2FA: true, twoFactorToken }` — NO se emite el JWT de sesión;
+   *    el `twoFactorToken` es efímero y solo sirve para el paso 2 (`/auth/2fa/login`).
+   * @throws UnauthorizedException si las credenciales son inválidas o el usuario está inactivo
+   *
    * Flujo de autenticación:
    * 1. Buscar usuario por email
    * 2. Verificar que el usuario existe y está activo
    * 3. Comparar contraseña con hash almacenado (bcrypt)
-   * 4. Generar y firmar token JWT
-   * 5. Retornar token y datos básicos del usuario
-   * 
+   * 4. Si el usuario tiene 2FA habilitado, exigir el segundo factor (ADR-0002)
+   * 5. Si no, generar y firmar el token JWT de sesión
+   *
    * Por qué bcrypt.compare: Es resistente a timing attacks y
    * realiza la comparación de forma segura contra el hash.
+   *
+   * Por qué exigir 2FA aquí: el TOTP solo aporta seguridad si el login lo verifica. Antes el
+   * segundo factor era decorativo (existía el endpoint de verificación pero login no lo usaba),
+   * de modo que un usuario con 2FA activo entraba solo con email + password.
    */
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
@@ -74,7 +83,72 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Generar token JWT
+    // Si el usuario tiene 2FA habilitado, NO emitir el JWT de sesión todavía: exigir el paso 2.
+    if (user.twoFactorEnabled) {
+      return {
+        requires2FA: true as const,
+        twoFactorToken: this.generateTwoFactorToken(user.id),
+      };
+    }
+
+    // Generar token JWT de sesión
+    const token = this.generateToken(user);
+
+    return {
+      access_token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+    };
+  }
+
+  /**
+   * Paso 2 del login con 2FA: valida el código TOTP y emite el JWT de sesión.
+   *
+   * @param dto - `{ twoFactorToken, code }` provenientes del paso 1 y de la app autenticadora
+   * @returns `{ access_token, user }` si el código es válido
+   * @throws UnauthorizedException (401) si el `twoFactorToken` es inválido o expiró
+   * @throws BadRequestException (400) si el código TOTP es incorrecto
+   *
+   * Por qué dos errores distintos: el 401 indica que hay que reiniciar el login (token efímero
+   * vencido); el 400 indica que el código es incorrecto pero el flujo sigue vigente. Los
+   * mensajes son genéricos para no filtrar cuál de los dos secretos falló.
+   */
+  async loginTwoFactor(dto: TwoFactorLoginDto) {
+    const { twoFactorToken, code } = dto;
+
+    // 1. Verificar el token efímero (firma + expiración) y que sea del tipo correcto.
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify<JwtPayload>(twoFactorToken);
+    } catch {
+      throw new UnauthorizedException('Sesión de verificación inválida o expirada');
+    }
+
+    if (payload.type !== '2fa' || !payload.sub) {
+      throw new UnauthorizedException('Sesión de verificación inválida o expirada');
+    }
+
+    // 2. Identificar al usuario y validar que siga activo.
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Sesión de verificación inválida o expirada');
+    }
+
+    // 3. Validar el código TOTP contra el secreto del usuario.
+    const isCodeValid = await this.twoFactorService.validate2FALogin(user.id, code);
+    if (!isCodeValid) {
+      throw new BadRequestException('Código de verificación inválido');
+    }
+
+    // 4. Recién ahora emitir el JWT de sesión definitivo.
     const token = this.generateToken(user);
 
     return {
@@ -163,18 +237,57 @@ export class AuthService {
   }
 
   /**
-   * Valida un token JWT y retorna el payload.
-   * Útil para verificación manual de tokens.
-   * 
-   * @param token - Token JWT a validar
-   * @returns Payload decodificado o null si es inválido
+   * Genera el token efímero del paso 1 del login con 2FA.
+   *
+   * @param userId - ID del usuario que debe completar el segundo factor
+   * @returns Token JWT de vida corta con el claim `type: '2fa'`
+   *
+   * Por qué un token distinto y de vida corta: este token NO es una sesión. Solo identifica al
+   * usuario entre el paso 1 y el paso 2 durante una ventana breve (5 min). El claim `type: '2fa'`
+   * permite a `JwtStrategy` rechazarlo en endpoints protegidos, de modo que tener este token sin
+   * superar el segundo factor no da acceso a nada (ADR-0002).
    */
-  async validateToken(token: string): Promise<JwtPayload | null> {
+  private generateTwoFactorToken(userId: string): string {
+    const payload: JwtPayload = { sub: userId, type: '2fa' };
+    return this.jwtService.sign(payload, { expiresIn: '5m' });
+  }
+
+  /**
+   * Valida un token JWT de sesión y retorna el usuario actual.
+   * Útil para verificación manual de tokens fuera del guard.
+   *
+   * @param token - Token JWT a validar
+   * @returns El usuario correspondiente al token
+   * @throws UnauthorizedException si el token es inválido/expiró o el usuario no existe/está inactivo
+   *
+   * Por qué revalidar contra la DB: el token puede ser válido pero el usuario pudo haber sido
+   * desactivado o eliminado; devolvemos el estado actual, igual que `JwtStrategy`.
+   */
+  async validateToken(token: string) {
+    let payload: JwtPayload;
     try {
-      return this.jwtService.verify<JwtPayload>(token);
+      payload = this.jwtService.verify<JwtPayload>(token);
     } catch {
-      return null;
+      throw new UnauthorizedException('Token inválido o expirado');
     }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Usuario no autorizado o inactivo');
+    }
+
+    return user;
   }
 
   /**
@@ -189,7 +302,7 @@ export class AuthService {
     userId: string,
     oldPassword: string,
     newPassword: string,
-  ): Promise<void> {
+  ): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -212,5 +325,7 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash: newPasswordHash },
     });
+
+    return { message: 'Contraseña actualizada correctamente' };
   }
 }

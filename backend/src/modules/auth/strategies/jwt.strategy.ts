@@ -23,8 +23,14 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
  */
 export interface JwtPayload {
   sub: string;      // User ID (subject)
-  email: string;    // Email del usuario
-  role: string;     // Rol del usuario (ADMIN/STAFF)
+  email?: string;   // Email del usuario (solo en el token de sesión)
+  role?: string;    // Rol del usuario (ADMIN/STAFF) (solo en el token de sesión)
+  /**
+   * Marca el tipo de token. Los tokens de sesión normales no llevan este claim; el token
+   * efímero del paso 1 del login con 2FA lleva `type: '2fa'` y NO debe conceder acceso a
+   * endpoints protegidos (ver ADR-0002).
+   */
+  type?: string;
 }
 
 @Injectable()
@@ -39,7 +45,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // No ignorar expiración - tokens expirados son rechazados
       ignoreExpiration: false,
       // Clave secreta para verificar la firma del token
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: configService.get<string>('JWT_SECRET') ?? 'default-dev-secret',
     });
   }
 
@@ -56,6 +62,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * pudo haber sido desactivado. Verificamos su estado actual.
    */
   async validate(payload: JwtPayload) {
+    // Rechazar el token efímero del paso 1 del login con 2FA: solo sirve para /auth/2fa/login,
+    // nunca para autenticar endpoints protegidos (ADR-0002).
+    if (payload.type === '2fa') {
+      throw new UnauthorizedException('Token no válido para esta operación');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: {
