@@ -154,24 +154,29 @@ Criterios de aceptación:
 
 ---
 
-### [ ] P1-TESTS · Cobertura real de la lógica de negocio
+### [x] P1-TESTS · Cobertura real de la lógica de negocio
 **Ref:** SDD H-09 · ADR-0008
 
 Pasos (en orden de prioridad):
-- [ ] Test de `two-factor.service` (incluye el flujo tocado por P0-2).
-- [ ] Test de `alerts.service` (stock bajo) y `reports.service` (KPIs del dashboard).
-- [ ] Test de `categories.service`, `suppliers.service`, `users.service` (CRUD + bordes:
-      404, duplicados, soft delete).
-- [ ] Smoke test del `authStore` mobile.
-- [ ] Quitar `--passWithNoTests` de los jobs de test del CI (backend y frontend) **una vez**
-      que existan las suites.
-- [ ] Medir con `pnpm test --coverage` y declarar el número real en README/SRS (si no llega a
-      80%, decir el número verdadero, no mentir).
+- [x] Test de `two-factor.service` (incluye el flujo tocado por P0-2). → 15 tests.
+- [x] Test de `alerts.service` (stock bajo) y `reports.service` (KPIs del dashboard). → 11 tests.
+- [x] Test de `categories.service`, `suppliers.service`, `users.service` (CRUD + bordes:
+      404, duplicados, soft delete). → 23 tests. Incluye la reparación de `products.service.spec` + validación minStock<=maxStock.
+- [x] Smoke test del `authStore` mobile. → 5 tests (ts-jest; jest-expo no es viable bajo pnpm).
+- [x] Quitar `--passWithNoTests` de los jobs de test del CI (backend y frontend) **una vez**
+      que existan las suites. → quitado de unitarios; se mantiene SOLO en e2e (no hay suites e2e).
+- [x] Medir con `pnpm test --coverage` y declarar el número real en README/SRS (si no llega a
+      80%, decir el número verdadero, no mentir). → medido (back 33% / front 23% global; servicios 70-100%).
+
+> NOTA (decisión del usuario): NO se declara cobertura en el README (no había claim de 80% allí;
+> el 80% vivía solo en el SRS DoD externo). Se entrega una nota para ajustar el SRS al número real.
+> Cobertura global baja porque cuenta controllers/DTOs/módulos/infra y componentes/páginas sin tests;
+> la capa de servicios (lógica de negocio) está bien cubierta.
 
 Criterios de aceptación:
-- [ ] `pnpm test` corre las nuevas suites en verde.
-- [ ] El CI ya no pasa "por no haber tests".
-- [ ] El porcentaje de cobertura declarado en el README coincide con el medido.
+- [x] `pnpm test` corre las nuevas suites en verde. → backend 97, frontend 28, mobile 5.
+- [x] El CI ya no pasa "por no haber tests".
+- [x] El porcentaje de cobertura declarado coincide con el medido. → README sin claim; SRS se ajusta a lo real (nota entregada).
 
 ## P2 — Pulido y hardening
 
