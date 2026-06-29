@@ -215,6 +215,19 @@ export class ProductsService {
   async create(createProductDto: CreateProductDto) {
     const { sku, barcode, categoryId, supplierId, ...data } = createProductDto;
 
+    // Coherencia de umbrales de stock: el mínimo no puede superar al máximo.
+    // Por qué: un minStock > maxStock corrompe la semántica de las alertas (siempre estaría
+    // "bajo") y de la reposición. Se valida antes de tocar la DB.
+    if (
+      data.maxStock !== undefined &&
+      data.maxStock !== null &&
+      data.minStock > data.maxStock
+    ) {
+      throw new BadRequestException(
+        `El stock mínimo (${data.minStock}) no puede ser mayor que el stock máximo (${data.maxStock})`,
+      );
+    }
+
     // Verificar SKU único
     const existingSku = await this.prisma.product.findUnique({
       where: { sku },
@@ -279,10 +292,24 @@ export class ProductsService {
    * @returns Producto actualizado
    */
   async update(id: string, updateProductDto: UpdateProductDto) {
-    // Verificar que existe
-    await this.findOne(id);
+    // Verificar que existe (y reusar sus valores actuales para validar umbrales)
+    const existing = await this.findOne(id);
 
     const { sku, barcode, categoryId, supplierId, ...data } = updateProductDto;
+
+    // Coherencia de umbrales de stock sobre el estado final (payload + valores actuales),
+    // para que actualizar solo uno de los dos no rompa la invariante minStock <= maxStock.
+    const finalMinStock = data.minStock ?? existing.minStock;
+    const finalMaxStock = data.maxStock ?? existing.maxStock;
+    if (
+      finalMaxStock !== undefined &&
+      finalMaxStock !== null &&
+      finalMinStock > finalMaxStock
+    ) {
+      throw new BadRequestException(
+        `El stock mínimo (${finalMinStock}) no puede ser mayor que el stock máximo (${finalMaxStock})`,
+      );
+    }
 
     // Si se actualiza el SKU, verificar que no exista
     if (sku) {

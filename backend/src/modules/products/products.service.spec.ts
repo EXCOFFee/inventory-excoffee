@@ -16,7 +16,6 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 describe('ProductsService', () => {
   let service: ProductsService;
-  let prismaService: PrismaService;
 
   // Mock de producto para tests
   const mockProduct = {
@@ -59,6 +58,8 @@ describe('ProductsService', () => {
       findUnique: jest.fn(),
     },
     $transaction: jest.fn((callback: (tx: any) => Promise<any>) => callback(mockPrismaService)),
+    // El servicio usa $queryRaw en el branch de lowStock de findAll (se reescribe en P2-QUERY).
+    $queryRaw: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -70,7 +71,6 @@ describe('ProductsService', () => {
     }).compile();
 
     service = module.get<ProductsService>(ProductsService);
-    prismaService = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
   });
@@ -146,7 +146,7 @@ describe('ProductsService', () => {
       const result = await service.findAll({ lowStock: true, page: 1, limit: 20 });
 
       // Assert
-      expect(result.data.every((p) => (p as { currentStock: number; minStock: number }).currentStock <= (p as { currentStock: number; minStock: number }).minStock)).toBe(true);
+      expect(result.data.every((p: any) => p.currentStock <= p.minStock)).toBe(true);
     });
 
     it('should calculate pagination correctly', async () => {
@@ -212,8 +212,8 @@ describe('ProductsService', () => {
     };
 
     it('should create a new product successfully', async () => {
-      // Arrange
-      mockPrismaService.product.findFirst.mockResolvedValue(null);
+      // Arrange — el servicio chequea unicidad de SKU/barcode con findUnique (no findFirst)
+      mockPrismaService.product.findUnique.mockResolvedValue(null);
       mockPrismaService.category.findUnique.mockResolvedValue({ id: 'category-uuid-123' });
       mockPrismaService.supplier.findUnique.mockResolvedValue({ id: 'supplier-uuid-123' });
       mockPrismaService.product.create.mockResolvedValue({
@@ -232,20 +232,21 @@ describe('ProductsService', () => {
     });
 
     it('should throw ConflictException when SKU already exists', async () => {
-      // Arrange
-      mockPrismaService.product.findFirst.mockResolvedValue(mockProduct);
+      // Arrange — findUnique({ where: { sku } }) devuelve un producto existente
+      mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
 
       // Act & Assert
       await expect(service.create(createDto)).rejects.toThrow(ConflictException);
     });
 
-    it('should throw NotFoundException when category not found', async () => {
-      // Arrange
-      mockPrismaService.product.findFirst.mockResolvedValue(null);
+    it('should throw BadRequestException when category not found', async () => {
+      // Arrange — un categoryId inválido en el payload de creación es un 400 (no un 404):
+      // el cliente referenció una categoría inexistente.
+      mockPrismaService.product.findUnique.mockResolvedValue(null);
       mockPrismaService.category.findUnique.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(createDto)).rejects.toThrow(BadRequestException);
     });
 
     it('should validate minStock <= maxStock', async () => {
@@ -255,7 +256,7 @@ describe('ProductsService', () => {
         minStock: 100,
         maxStock: 50,
       };
-      mockPrismaService.product.findFirst.mockResolvedValue(null);
+      mockPrismaService.product.findUnique.mockResolvedValue(null);
       mockPrismaService.category.findUnique.mockResolvedValue({ id: 'category-uuid-123' });
       mockPrismaService.supplier.findUnique.mockResolvedValue({ id: 'supplier-uuid-123' });
 
@@ -323,10 +324,14 @@ describe('ProductsService', () => {
 
       // Assert
       expect(result.isActive).toBe(false);
-      expect(mockPrismaService.product.update).toHaveBeenCalledWith({
-        where: { id: 'product-uuid-123' },
-        data: { isActive: false },
-      });
+      // El servicio hace soft delete con update({ where, data, select }); usamos
+      // objectContaining para no acoplarnos al `select`.
+      expect(mockPrismaService.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'product-uuid-123' },
+          data: { isActive: false },
+        }),
+      );
     });
 
     it('should throw NotFoundException when product not found', async () => {
