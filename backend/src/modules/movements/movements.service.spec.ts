@@ -18,7 +18,6 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 describe('MovementsService', () => {
   let service: MovementsService;
-  let prismaService: PrismaService;
 
   // Mock de producto
   const mockProduct = {
@@ -70,7 +69,6 @@ describe('MovementsService', () => {
     }).compile();
 
     service = module.get<MovementsService>(MovementsService);
-    prismaService = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
   });

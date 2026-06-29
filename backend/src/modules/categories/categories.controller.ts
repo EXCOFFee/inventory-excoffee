@@ -26,7 +26,7 @@ import { Role } from '@prisma/client';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards';
-import { Roles, Public } from '../../common/decorators';
+import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 
 @ApiTags('Categories')
