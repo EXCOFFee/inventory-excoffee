@@ -135,21 +135,22 @@ Criterios de aceptación:
 - [x] Cada ✅ corresponde a código existente y funcional. <!-- auditado; corregidos refresh tokens, costos, notificaciones email -->
 - [x] `LICENSE` existe.
 
-### [ ] P1-SRS · Alinear el SRS con el código (Prisma, 2FA, StockAlert)
+### [x] P1-SRS · Alinear el SRS con el código (Prisma, 2FA, StockAlert)
 **Ref:** SDD H-04 · ADR-0006
 **Archivo:** `SRS_Sistema_Inventario.md` (⚠️ vive **fuera del repo**)
+**Estado:** bloque reescrito **entregado** al humano para pegar (el SRS vive fuera del repo).
 
 Pasos:
-- [ ] Declarar Prisma como ORM elegido; TypeORM como alternativa descartada.
-- [ ] Reescribir el ejemplo de la sección 22.3 en Prisma, reflejando el `movements.service.ts`
+- [x] Declarar Prisma como ORM elegido; TypeORM como alternativa descartada.
+- [x] Reescribir el ejemplo de la sección 22.3 en Prisma, reflejando el `movements.service.ts`
       final de P0-1 (con la transacción y el decremento atómico implementados).
-- [ ] Añadir secciones breves para 2FA (flujo de dos pasos) y la entidad `StockAlert`.
+- [x] Añadir secciones breves para 2FA (flujo de dos pasos) y la entidad `StockAlert`.
 
 Criterios de aceptación:
-- [ ] El SRS no menciona TypeORM como implementación.
-- [ ] El ejemplo 22.3 coincide con el código real.
-- [ ] Si no hay acceso de escritura al SRS, el agente entrega el bloque reescrito en su
-      resumen final para que el humano lo pegue.
+- [x] El SRS no menciona TypeORM como implementación.
+- [x] El ejemplo 22.3 coincide con el código real.
+- [x] Si no hay acceso de escritura al SRS, el agente entrega el bloque reescrito en su
+      resumen final para que el humano lo pegue. → entregado en el chat (turno P1-SRS).
 
 ---
 
