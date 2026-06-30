@@ -219,7 +219,10 @@ docker-compose up -d --build
 Asegúrate de configurar:
 - `DATABASE_URL` - URL de PostgreSQL
 - `JWT_SECRET` - Secreto para tokens JWT. **⚠️ Obligatorio cambiarlo en producción**: no uses el valor de ejemplo de `.env.example` / `docker-compose.yml`. Generá uno fuerte, por ejemplo con `openssl rand -base64 48`.
+- `CORS_ORIGIN` - **Obligatorio en producción**: orígenes permitidos separados por comas (no `*`), p. ej. `https://app.midominio.com`. En desarrollo el default es `http://localhost:5173`.
 - `NODE_ENV=production`
+
+> Con `NODE_ENV=production`, el backend hace **fail-fast**: no arranca si `JWT_SECRET` falta/es el de ejemplo o si `CORS_ORIGIN` no está definido (ADR-0004).
 
 ## 🤝 Contribuir
 

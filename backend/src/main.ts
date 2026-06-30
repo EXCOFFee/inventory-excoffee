@@ -16,6 +16,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { resolveCorsOrigins, validateProductionEnv } from './common/config/env.validation';
 
 /**
  * Función bootstrap que inicializa y configura la aplicación.
@@ -27,6 +28,10 @@ import { AppModule } from './app.module';
  * 4. Prefijo global: Todas las rutas comienzan con /api
  */
 async function bootstrap() {
+  // Fail-fast en producción ante configuración insegura (CORS_ORIGIN / JWT_SECRET) — ADR-0004.
+  // Se valida ANTES de crear la app para no arrancar nunca con secretos de ejemplo o CORS abierto.
+  validateProductionEnv();
+
   const app = await NestFactory.create(AppModule);
 
   // ============================================
@@ -66,9 +71,11 @@ async function bootstrap() {
   // ============================================
   // CONFIGURACIÓN CORS
   // ============================================
-  // Permite que el frontend React y la app móvil se comuniquen con la API
+  // Lista explícita de orígenes permitidos (nunca '*', incompatible con credentials: true).
+  // En dev usa el front de Vite (http://localhost:5173); en prod CORS_ORIGIN es obligatorio
+  // (validado arriba). Soporta lista separada por comas. Ver ADR-0004 / H-05.
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: resolveCorsOrigins(),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   });
@@ -151,4 +158,9 @@ Incluir el token en el header: \`Authorization: Bearer <token>\`
   `);
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  // Fail-fast con mensaje claro (p. ej. configuración insegura en producción) y exit ≠ 0.
+  console.error('❌ No se pudo iniciar la aplicación:');
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

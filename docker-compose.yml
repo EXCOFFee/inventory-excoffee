@@ -43,8 +43,12 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inventory_pro?schema=public
-      JWT_SECRET: ${JWT_SECRET:-inventory-pro-super-secret-key-change-in-production}
+      # Default de DEMO (no es el valor de .env.example, así pasa el fail-fast de prod).
+      # ⚠️ Para un despliegue real, exportá JWT_SECRET con un secreto fuerte y único.
+      JWT_SECRET: ${JWT_SECRET:-inventorypro-demo-secret-change-me-in-real-prod}
       JWT_EXPIRATION: 24h
+      # CORS_ORIGIN es obligatorio con NODE_ENV=production; el frontend del compose corre en :80.
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
     ports:
       - "3000:3000"
     depends_on:
