@@ -36,22 +36,18 @@ export class AlertsService {
     this.logger.log('🔍 Verificando productos con stock bajo...');
 
     try {
-      // Obtener productos activos
-      const products = await this.prisma.product.findMany({
-        where: { isActive: true },
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          currentStock: true,
-          minStock: true,
-        },
-      });
-
-      // Filtrar productos con stock bajo
-      const lowStockProducts = products.filter(
-        (p) => p.currentStock <= p.minStock
-      );
+      // Filtrado de stock bajo a nivel de BASE DE DATOS, aprovechando @@index([currentStock]).
+      // Prisma no permite comparar dos columnas (currentStock <= minStock) con su API fluida, así
+      // que se usa $queryRaw con tagged template (sin interpolación de strings, sin riesgo de
+      // inyección). No es un anti-patrón: es la forma idiomática ante esa limitación (ADR-0005).
+      // Devuelve SOLO los productos con stock bajo, en vez de traer todos y filtrar en memoria.
+      const lowStockProducts = await this.prisma.$queryRaw<
+        Array<{ id: string; sku: string; name: string; currentStock: number; minStock: number }>
+      >`
+        SELECT id, sku, name, current_stock AS "currentStock", min_stock AS "minStock"
+        FROM products
+        WHERE is_active = true AND current_stock <= min_stock
+      `;
 
       if (lowStockProducts.length === 0) {
         this.logger.log('✅ No hay productos con stock bajo');

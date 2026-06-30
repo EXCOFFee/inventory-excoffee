@@ -32,7 +32,7 @@ export class ReportsService {
     const [
       totalProducts,
       activeProducts,
-      lowStockProducts,
+      lowStockRows,
       outOfStockProducts,
       totalCategories,
       totalSuppliers,
@@ -44,11 +44,15 @@ export class ReportsService {
       this.prisma.product.count(),
       // Productos activos
       this.prisma.product.count({ where: { isActive: true } }),
-      // Productos con stock bajo (se calculará en JS)
-      this.prisma.product.findMany({
-        where: { isActive: true },
-        select: { currentStock: true, minStock: true },
-      }),
+      // Productos con stock bajo, contados a nivel SQL (usa @@index([currentStock])).
+      // Prisma no compara dos columnas con su API fluida → $queryRaw (tagged template, sin
+      // interpolación de strings). Se mantiene la distinción del dashboard: low = stock <= min
+      // y stock > 0 (los de stock 0 cuentan aparte como "sin stock"). Ver ADR-0005 / H-06.
+      this.prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM products
+        WHERE is_active = true AND current_stock <= min_stock AND current_stock > 0
+      `,
       // Productos sin stock
       this.prisma.product.count({
         where: { isActive: true, currentStock: 0 },
@@ -72,10 +76,9 @@ export class ReportsService {
       }),
     ]);
 
-    // Calcular productos con stock bajo
-    const lowStockCount = lowStockProducts.filter(
-      (p) => p.currentStock <= p.minStock && p.currentStock > 0
-    ).length;
+    // El conteo de stock bajo ya viene calculado por la consulta SQL (mismo criterio que antes:
+    // currentStock <= minStock && currentStock > 0).
+    const lowStockCount = Number(lowStockRows[0]?.count ?? 0);
 
     // Calcular valor del inventario
     const inventoryValue = stockValuation.reduce((sum, p) => {

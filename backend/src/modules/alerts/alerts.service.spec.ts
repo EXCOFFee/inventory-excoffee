@@ -17,9 +17,8 @@ describe('AlertsService', () => {
   let service: AlertsService;
 
   const mockPrismaService = {
-    product: {
-      findMany: jest.fn(),
-    },
+    // checkLowStock filtra el stock bajo con $queryRaw (devuelve solo los productos bajos).
+    $queryRaw: jest.fn(),
     stockAlert: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -48,9 +47,9 @@ describe('AlertsService', () => {
 
   describe('checkLowStock', () => {
     it('crea una alerta solo para los productos con stock bajo y sin alerta activa', async () => {
-      mockPrismaService.product.findMany.mockResolvedValue([
-        { id: '1', sku: 'A', name: 'Bajo', currentStock: 5, minStock: 10 },   // bajo
-        { id: '2', sku: 'B', name: 'OK', currentStock: 50, minStock: 10 },     // no bajo
+      // $queryRaw ya devuelve SOLO los productos con stock bajo (el filtro es a nivel SQL).
+      mockPrismaService.$queryRaw.mockResolvedValue([
+        { id: '1', sku: 'A', name: 'Bajo', currentStock: 5, minStock: 10 },
       ]);
       mockPrismaService.stockAlert.findFirst.mockResolvedValue(null); // no hay alerta previa
       mockPrismaService.stockAlert.create.mockResolvedValue({});
@@ -64,7 +63,7 @@ describe('AlertsService', () => {
     });
 
     it('no duplica una alerta si ya existe una sin reconocer (idempotencia)', async () => {
-      mockPrismaService.product.findMany.mockResolvedValue([
+      mockPrismaService.$queryRaw.mockResolvedValue([
         { id: '1', sku: 'A', name: 'Bajo', currentStock: 5, minStock: 10 },
       ]);
       mockPrismaService.stockAlert.findFirst.mockResolvedValue({ id: 'alert-1' }); // ya existe
@@ -75,9 +74,8 @@ describe('AlertsService', () => {
     });
 
     it('no crea alertas si no hay productos con stock bajo', async () => {
-      mockPrismaService.product.findMany.mockResolvedValue([
-        { id: '2', sku: 'B', name: 'OK', currentStock: 50, minStock: 10 },
-      ]);
+      // La consulta SQL no devuelve filas (ningún producto bajo).
+      mockPrismaService.$queryRaw.mockResolvedValue([]);
 
       await service.checkLowStock();
 

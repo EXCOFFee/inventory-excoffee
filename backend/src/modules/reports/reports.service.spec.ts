@@ -21,6 +21,8 @@ describe('ReportsService', () => {
     category: { count: jest.fn(), findMany: jest.fn() },
     supplier: { count: jest.fn() },
     movement: { count: jest.fn(), groupBy: jest.fn(), findMany: jest.fn() },
+    // getDashboard cuenta el stock bajo con $queryRaw (filtro SQL).
+    $queryRaw: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -46,17 +48,13 @@ describe('ReportsService', () => {
         .mockResolvedValueOnce(10) // total
         .mockResolvedValueOnce(8)  // active
         .mockResolvedValueOnce(2); // outOfStock
-      mockPrismaService.product.findMany
-        // lowStock select: solo {5,10} es bajo (>0 && <=min); {50,10} no
-        .mockResolvedValueOnce([
-          { currentStock: 5, minStock: 10 },
-          { currentStock: 50, minStock: 10 },
-        ])
-        // valuation select
-        .mockResolvedValueOnce([
-          { currentStock: 5, price: 100, cost: 60 },
-          { currentStock: 50, price: 10, cost: 5 },
-        ]);
+      // stock bajo: ahora se cuenta a nivel SQL con $queryRaw
+      mockPrismaService.$queryRaw.mockResolvedValue([{ count: 1 }]);
+      // findMany ahora solo se usa para la valorización del inventario
+      mockPrismaService.product.findMany.mockResolvedValueOnce([
+        { currentStock: 5, price: 100, cost: 60 },
+        { currentStock: 50, price: 10, cost: 5 },
+      ]);
       mockPrismaService.category.count.mockResolvedValue(3);
       mockPrismaService.supplier.count.mockResolvedValue(4);
       mockPrismaService.movement.count
