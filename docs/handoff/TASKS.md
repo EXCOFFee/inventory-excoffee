@@ -180,21 +180,23 @@ Criterios de aceptación:
 
 ## P2 — Pulido y hardening
 
-### [ ] P2-CORS · Endurecer CORS y secreto JWT
+### [x] P2-CORS · Endurecer CORS y secreto JWT
 **Ref:** SDD H-05 y H-07 · ADR-0004
-**Archivos:** `backend/src/main.ts`, `backend/.env.example`, `docker-compose.yml`, README
+**Archivos:** `backend/src/main.ts`, `backend/src/common/config/env.validation.ts`,
+`backend/.env.example`, `docker-compose.yml`, README, `backend/src/modules/auth/auth.module.ts`
 
 Pasos:
-- [ ] CORS: default `http://localhost:5173` en dev; soportar lista por comas en `CORS_ORIGIN`;
-      en `NODE_ENV=production` exigir `CORS_ORIGIN` (fail-fast si falta).
-- [ ] JWT: en `production`, validar que `JWT_SECRET` exista y no sea el valor de ejemplo;
-      fallar/advertir si lo es.
-- [ ] Documentar `CORS_ORIGIN` y la obligatoriedad de `JWT_SECRET` en `.env.example` y README.
+- [x] CORS: default `http://localhost:5173` en dev; lista por comas en `CORS_ORIGIN`;
+      en `NODE_ENV=production` exigir `CORS_ORIGIN` (fail-fast). Sin `*`.
+- [x] JWT: en `production`, validar que `JWT_SECRET` exista y no sea el valor de ejemplo/fallback;
+      fail-fast con mensaje claro.
+- [x] Documentar `CORS_ORIGIN` y la obligatoriedad de `JWT_SECRET` en `.env.example` y README.
+- [x] (extra) Quitado el `eslint-disable` sobrante en `auth.module.ts`.
 
 Criterios de aceptación:
-- [ ] Arranque local sin config extra sigue funcionando (front en 5173).
-- [ ] Arranque en prod sin `CORS_ORIGIN` o con secreto de ejemplo → falla con mensaje claro.
-- [ ] `pnpm build` verde.
+- [x] Arranque local sin config extra sigue funcionando (front en 5173). → default dev + tests.
+- [x] Arranque en prod sin `CORS_ORIGIN` o con secreto de ejemplo → falla con mensaje claro. → verificado (exit 1).
+- [x] `pnpm build` verde. → build + 105 tests + lint 0.
 
 ### [ ] P2-QUERY · Filtrar stock bajo en la base de datos
 **Ref:** SDD H-06 · ADR-0005
