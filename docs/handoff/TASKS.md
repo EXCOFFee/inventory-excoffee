@@ -251,26 +251,25 @@ Criterios de aceptación:
 - [x] Test: `quantity: 2.5` → 400; `quantity: 3` → OK. → `create-movement.dto.spec.ts`.
 - [x] Los DTOs de login y register son coherentes; tests de auth verdes. → 108 tests verdes.
 
-### [ ] P2-XSS · Documentar (o mejorar) el storage del token web
+### [x] P2-XSS · Documentar (o mejorar) el storage del token web
 **Ref:** SDD H-10 · ADR-0007
 **Archivos:** `frontend/src/api/client.ts`, README
 
-Pasos (elegir nivel):
-- [ ] **Mínimo:** documentar en README/código el trade-off de `localStorage` y la mitigación
-      (Helmet + CSP en backend). Aceptable para portafolio.
-- [ ] **Ideal (opcional):** migrar el token a cookie `httpOnly` + `SameSite=Strict` emitida por
-      el backend; el frontend deja de tocar el token. Cambio mayor — solo si hay tiempo.
+Nivel elegido por el usuario: **mínimo** (documentar; sin migrar a cookie httpOnly).
+- [x] **Mínimo:** documentado en README (sección "Almacenamiento del token y XSS") y en
+      `frontend/src/api/client.ts` el trade-off de `localStorage` + mitigación (Helmet + CSP) +
+      que mobile usa expo-secure-store + la cookie httpOnly como evolución documentada.
+- [ ] **Ideal (opcional):** migrar a cookie `httpOnly` — **no** realizado a propósito.
 
 Criterios de aceptación:
-- [ ] README documenta la decisión de storage y su trade-off.
-- [ ] Si se implementa la cookie: el token ya no aparece en `localStorage`.
+- [x] README documenta la decisión de storage y su trade-off.
 
 ## Cierre
 
-### [ ] FINAL · Pasada de verificación global
-- [ ] Las 3 categorías (P0/P1/P2) cerradas y marcadas.
-- [ ] `pnpm test` (backend), `pnpm lint`, `pnpm build` verdes en local.
-- [ ] El CI (`.github/workflows/ci.yml`) pasa en la rama.
-- [ ] README releído de punta a punta: cada comando funciona, cada ✅ es real.
-- [ ] Resumen entregado al humano: qué se cambió, qué decisiones de ADR se aplicaron, y (si
-      aplica) el bloque del SRS reescrito para pegar.
+### [~] FINAL · Pasada de verificación global
+- [x] Las 3 categorías (P0/P1/P2) cerradas y marcadas.
+- [x] `pnpm test` (backend), `pnpm lint`, `pnpm build` verdes en local. → backend 108 tests / lint 0 / build; frontend 28 tests / build.
+- [ ] El CI (`.github/workflows/ci.yml`) pasa en la rama. → ci.yml dispara en push a `main`/`develop`
+      o PR a `main`; en `remediation/p0` correrá al abrir el PR (reservado por el usuario).
+- [x] README releído: cada comando ejecutable, cada ✅ real (auditado en P1-README + adiciones P2).
+- [x] Resumen entregado al humano (incluido el bloque del SRS para pegar, entregado en P1-SRS).
