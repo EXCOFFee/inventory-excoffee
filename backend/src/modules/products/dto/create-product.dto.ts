@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsInt,
   IsUUID,
   Min,
   MaxLength,
@@ -71,7 +72,7 @@ export class CreateProductDto {
     default: 0,
   })
   @IsOptional()
-  @IsNumber()
+  @IsInt({ message: 'El stock inicial debe ser un número entero' })
   @Min(0)
   @Type(() => Number)
   currentStock?: number;
@@ -80,7 +81,7 @@ export class CreateProductDto {
     description: 'Stock mínimo para alertas',
     example: 10,
   })
-  @IsNumber()
+  @IsInt({ message: 'El stock mínimo debe ser un número entero' })
   @Min(0)
   @Type(() => Number)
   minStock: number;
@@ -90,7 +91,7 @@ export class CreateProductDto {
     example: 100,
   })
   @IsOptional()
-  @IsNumber()
+  @IsInt({ message: 'El stock máximo debe ser un número entero' })
   @Min(0)
   @Type(() => Number)
   maxStock?: number;
