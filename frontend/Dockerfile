@@ -6,13 +6,14 @@
 # Stage 1: Construcción
 FROM node:20-alpine AS builder
 
-# Instalar pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Instalar pnpm (pinneado a v10: pnpm@latest ya resuelve a v11, que no corre sobre Node 20 de
+# node:20-alpine y rompía el build con ERR_UNKNOWN_BUILTIN_MODULE)
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
-# Copiar archivos de dependencias
-COPY package.json pnpm-lock.yaml ./
+# Copiar archivos de dependencias (incluido .npmrc: node-linker=hoisted, igual que en local)
+COPY package.json pnpm-lock.yaml .npmrc ./
 
 # Instalar dependencias
 RUN pnpm install --frozen-lockfile
