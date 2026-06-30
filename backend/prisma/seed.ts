@@ -23,6 +23,16 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Iniciando seed de la base de datos...\n');
 
+  // Idempotencia: si la base ya tiene productos sembrados, no re-sembrar. Permite que el
+  // contenedor reinicie (restart: unless-stopped) sin chocar contra el SKU único de los
+  // productos (P2-SEED). Un fallo real sembrando una base vacía sigue propagándose: no se
+  // oculta nada (a diferencia del viejo `|| echo` del entrypoint).
+  const alreadySeeded = await prisma.product.count();
+  if (alreadySeeded > 0) {
+    console.log('⏭️  La base ya tiene datos sembrados; se omite el seed (idempotente).\n');
+    return;
+  }
+
   // ============================================
   // 1. CREAR USUARIOS
   // ============================================

@@ -12,8 +12,10 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
-# Copiar archivos de dependencias
-COPY package.json pnpm-lock.yaml ./
+# Copiar archivos de dependencias (incluido .npmrc: define node-linker=hoisted, necesario
+# para que `pnpm prisma generate` resuelva el cliente. Sin .npmrc el install usa el layout
+# por defecto de pnpm y @prisma/client queda "sin exports" -> build con 143 errores TS).
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY prisma ./prisma/
 
 # Instalar todas las dependencias (incluyendo devDependencies)
@@ -43,8 +45,10 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
-# Copiar archivos de dependencias
-COPY package.json pnpm-lock.yaml ./
+# Copiar archivos de dependencias (incluido .npmrc: define node-linker=hoisted, necesario
+# para que `pnpm prisma generate` resuelva el cliente. Sin .npmrc el install usa el layout
+# por defecto de pnpm y @prisma/client queda "sin exports" -> build con 143 errores TS).
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY prisma ./prisma/
 
 # Instalar solo dependencias de producción + prisma CLI para migraciones
@@ -69,4 +73,6 @@ EXPOSE 3000
 
 # Usar el script de entrada que ejecuta migraciones
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["node", "dist/main"]
+# `nest build` anida la salida en dist/src/ (el build incluye prisma/ y test/), por eso el
+# entrypoint es dist/src/main y no dist/main.
+CMD ["node", "dist/src/main"]
