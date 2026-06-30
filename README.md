@@ -96,6 +96,12 @@ El 2FA (TOTP) es opcional por usuario y, cuando está activo, se **exige** en el
 
 Gestión del 2FA (requiere sesión iniciada): `POST /api/auth/2fa/generate` (devuelve QR), `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/disable`, `GET /api/auth/2fa/status`.
 
+## 🛡️ Almacenamiento del token y XSS (decisión consciente)
+
+- **Web:** el JWT se guarda en `localStorage`. Es simple, pero **expuesto a XSS**: un script inyectado podría leerlo. Mitigaciones activas: **Helmet** + **Content-Security-Policy** en el backend (en producción) y validación estricta de entrada.
+- **Mobile:** el token se guarda en **`expo-secure-store`** (almacenamiento cifrado del dispositivo), no en un store accesible por JS.
+- **Mejora ideal (no implementada a propósito):** mover el token web a una cookie **`httpOnly` + `SameSite=Strict`** emitida por el backend, para que el JavaScript del front no pueda leerla. Es un cambio mayor de la arquitectura de auth (login, interceptores y CORS con credenciales) y se deja documentado como evolución, no como pendiente oculto (ADR-0007 / H-10).
+
 ## 📚 Documentación de API
 
 Una vez iniciado el backend, accede a la documentación Swagger:
