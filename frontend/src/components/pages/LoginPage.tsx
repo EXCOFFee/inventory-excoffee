@@ -9,14 +9,29 @@ import { useAuthStore } from '../../stores';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { login, verify2FA, isLoading, error, clearError, requires2FA } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login({ email, password });
+      // Si el usuario tiene 2FA, el store deja `requires2FA` en true: no navegamos, la UI
+      // mostrará el campo para el código del segundo factor.
+      if (!useAuthStore.getState().requires2FA) {
+        navigate('/');
+      }
+    } catch {
+      // Error handled in store
+    }
+  };
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await verify2FA(code);
       navigate('/');
     } catch {
       // Error handled in store
@@ -51,8 +66,14 @@ export const LoginPage: React.FC = () => {
 
         {/* Login Card */}
         <div className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-white mb-2">Bienvenido de nuevo</h2>
-          <p className="text-dark-400 mb-6">Ingresa tus credenciales para continuar</p>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {requires2FA ? 'Verificación en dos pasos' : 'Bienvenido de nuevo'}
+          </h2>
+          <p className="text-dark-400 mb-6">
+            {requires2FA
+              ? 'Ingresa el código de 6 dígitos de tu app autenticadora'
+              : 'Ingresa tus credenciales para continuar'}
+          </p>
 
           {error && (
             <div className="mb-6 p-4 bg-danger-500/10 border border-danger-500/30 rounded-xl text-danger-400 text-sm flex items-center justify-between backdrop-blur-sm">
@@ -70,6 +91,33 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
+          {requires2FA ? (
+            <form onSubmit={handleVerify2FA} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Código de verificación
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="123456"
+                  required
+                  className="cyber-input tracking-[0.5em] text-center text-lg"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading || code.length !== 6}
+                className="btn-primary w-full py-3 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <span>Verificando...</span> : <span>Verificar y entrar</span>}
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-dark-300 mb-2">
@@ -148,6 +196,7 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
           </form>
+          )}
 
           <div className="mt-6">
             <div className="relative">

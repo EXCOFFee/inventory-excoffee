@@ -35,7 +35,7 @@ import {
 import { Role } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { TwoFactorService } from './two-factor.service';
-import { LoginDto, RegisterDto } from './dto';
+import { LoginDto, RegisterDto, TwoFactorLoginDto } from './dto';
 import { JwtAuthGuard } from './guards';
 import { Public, Roles, CurrentUser } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
@@ -59,13 +59,65 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Iniciar sesión',
-    description: 'Autentica un usuario y retorna un token JWT válido por 24 horas.',
+    summary: 'Iniciar sesión (paso 1)',
+    description:
+      'Autentica con email y contraseña. Si el usuario NO tiene 2FA, devuelve directamente el ' +
+      'access_token (sin cambios). Si TIENE 2FA habilitado, NO emite el JWT de sesión: devuelve ' +
+      '`requires2FA: true` y un `twoFactorToken` efímero (≈5 min) que solo sirve para el paso 2 ' +
+      '(POST /auth/2fa/login).',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: 'Login exitoso',
+    description: 'Credenciales válidas. Una de dos formas según el estado de 2FA.',
+    schema: {
+      oneOf: [
+        {
+          title: 'Sin 2FA',
+          example: {
+            access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+            user: {
+              id: 'uuid',
+              email: 'admin@inventorypro.com',
+              firstName: 'Admin',
+              lastName: 'Principal',
+              role: 'ADMIN',
+            },
+          },
+        },
+        {
+          title: 'Con 2FA',
+          example: {
+            requires2FA: true,
+            twoFactorToken: 'eyJ...token-efimero-pre-2fa...',
+          },
+        },
+      ],
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
+  }
+
+  /**
+   * Endpoint de login con 2FA (paso 2).
+   * Recibe el twoFactorToken del paso 1 y el código TOTP; si es válido emite el access_token.
+   */
+  @Public()
+  @Post('2fa/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validar 2FA y emitir sesión (paso 2)',
+    description:
+      'Recibe el twoFactorToken del paso 1 y el código TOTP de 6 dígitos. Si el código es ' +
+      'válido, emite el access_token definitivo. El twoFactorToken es efímero y NO da acceso a ' +
+      'endpoints protegidos por sí mismo.',
+  })
+  @ApiBody({ type: TwoFactorLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Código válido. Devuelve el access_token de sesión.',
     schema: {
       example: {
         access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
@@ -79,9 +131,10 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  @ApiResponse({ status: 400, description: 'Código TOTP inválido' })
+  @ApiResponse({ status: 401, description: 'twoFactorToken inválido o expirado' })
+  async loginTwoFactor(@Body() dto: TwoFactorLoginDto) {
+    return this.authService.loginTwoFactor(dto);
   }
 
   /**

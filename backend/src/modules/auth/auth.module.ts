@@ -13,7 +13,7 @@
  */
 
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
@@ -26,18 +26,21 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
   imports: [
     // PassportModule para integración con estrategias de autenticación
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    
+
     // JwtModule configurado con variables de entorno
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        // Clave secreta para firmar tokens
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: {
-          // Tiempo de expiración del token (configurable)
-          expiresIn: configService.get<string>('JWT_EXPIRATION') || '24h',
-        },
-      }),
+      useFactory: async (configService: ConfigService): Promise<JwtModuleOptions> => {
+        return {
+          // Clave secreta para firmar tokens
+          secret: configService.get<string>('JWT_SECRET') ?? 'default-dev-secret',
+          signOptions: {
+            // Tiempo de expiración del token (configurable). El cast es por la firma estricta
+            // de expiresIn en @types/jsonwebtoken (StringValue | number) para un string plano.
+            expiresIn: (configService.get<string>('JWT_EXPIRATION') ?? '24h') as any,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
@@ -50,4 +53,4 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
   ],
   exports: [AuthService, TwoFactorService, JwtAuthGuard, JwtModule],
 })
-export class AuthModule {}
+export class AuthModule { }

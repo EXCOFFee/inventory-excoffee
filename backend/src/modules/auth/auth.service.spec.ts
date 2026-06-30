@@ -22,14 +22,13 @@ import {
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { TwoFactorService } from './two-factor.service';
 
 // Mock de bcrypt
 jest.mock('bcrypt');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prismaService: PrismaService;
-  let jwtService: JwtService;
 
   // Mock de usuario para tests
   const mockUser = {
@@ -67,6 +66,11 @@ describe('AuthService', () => {
     get: jest.fn().mockReturnValue('test-secret'),
   };
 
+  // Mock de TwoFactorService (validación del código TOTP en el paso 2)
+  const mockTwoFactorService = {
+    validate2FALogin: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -74,12 +78,11 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: TwoFactorService, useValue: mockTwoFactorService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    jwtService = module.get<JwtService>(JwtService);
 
     jest.clearAllMocks();
   });
@@ -103,11 +106,11 @@ describe('AuthService', () => {
       // Act
       const result = await service.login(loginDto);
 
-      // Assert
-      expect(result).toHaveProperty('accessToken');
+      // Assert (contrato: snake_case access_token, ADR-0007)
+      expect(result).toHaveProperty('access_token');
       expect(result).toHaveProperty('user');
-      expect(result.user.email).toBe(mockUser.email);
-      expect(result.user).not.toHaveProperty('passwordHash');
+      expect((result as any).user.email).toBe(mockUser.email);
+      expect((result as any).user).not.toHaveProperty('passwordHash');
     });
 
     it('should throw UnauthorizedException for invalid email', async () => {
@@ -147,13 +150,73 @@ describe('AuthService', () => {
         twoFactorSecret: 'encrypted-secret',
       });
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockJwtService.sign.mockReturnValue('ephemeral-2fa-token');
 
       // Act
       const result = await service.login(loginDto);
 
-      // Assert
+      // Assert (contrato: requires2FA + twoFactorToken, sin access_token; ADR-0002)
       expect(result).toHaveProperty('requires2FA', true);
-      expect(result).toHaveProperty('tempToken');
+      expect(result).toHaveProperty('twoFactorToken');
+      expect(result).not.toHaveProperty('access_token');
+    });
+  });
+
+  describe('loginTwoFactor', () => {
+    const loginDto = {
+      twoFactorToken: 'ephemeral-2fa-token',
+      code: '123456',
+    };
+
+    it('should return access_token when the TOTP code is valid', async () => {
+      // Arrange
+      mockJwtService.verify.mockReturnValue({ sub: mockUser.id, type: '2fa' });
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'encrypted-secret',
+      });
+      mockTwoFactorService.validate2FALogin.mockResolvedValue(true);
+      mockJwtService.sign.mockReturnValue('session-jwt-token');
+
+      // Act
+      const result = await service.loginTwoFactor(loginDto);
+
+      // Assert
+      expect(result).toHaveProperty('access_token', 'session-jwt-token');
+      expect(result.user.id).toBe(mockUser.id);
+    });
+
+    it('should throw BadRequestException when the TOTP code is invalid', async () => {
+      // Arrange
+      mockJwtService.verify.mockReturnValue({ sub: mockUser.id, type: '2fa' });
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'encrypted-secret',
+      });
+      mockTwoFactorService.validate2FALogin.mockResolvedValue(false);
+
+      // Act & Assert
+      await expect(service.loginTwoFactor(loginDto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw UnauthorizedException when the twoFactorToken is invalid/expired', async () => {
+      // Arrange
+      mockJwtService.verify.mockImplementation(() => {
+        throw new Error('jwt expired');
+      });
+
+      // Act & Assert
+      await expect(service.loginTwoFactor(loginDto)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when the token is not a 2fa token', async () => {
+      // Arrange: un token de sesión normal (sin type: '2fa') no debe servir para el paso 2.
+      mockJwtService.verify.mockReturnValue({ sub: mockUser.id, role: 'ADMIN' });
+
+      // Act & Assert
+      await expect(service.loginTwoFactor(loginDto)).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -169,10 +232,15 @@ describe('AuthService', () => {
       // Arrange
       mockPrismaService.user.findUnique.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_password');
+      // El servicio usa `select` para NO devolver passwordHash: el mock refleja esa proyección.
       mockPrismaService.user.create.mockResolvedValue({
-        ...mockUser,
-        ...registerDto,
         id: 'new-user-uuid',
+        email: registerDto.email.toLowerCase(),
+        firstName: registerDto.firstName,
+        lastName: registerDto.lastName,
+        role: 'STAFF',
+        isActive: true,
+        createdAt: new Date(),
       });
 
       // Act

@@ -21,10 +21,10 @@ export interface User {
 }
 
 export interface LoginResponse {
-  accessToken?: string;
+  // Contrato unificado en snake_case (ADR-0007). El token de sesión llega como access_token.
   access_token?: string;
   requires2FA?: boolean;
-  tempToken?: string;
+  twoFactorToken?: string;
   user?: User;
 }
 
@@ -38,26 +38,27 @@ export interface RegisterDto {
 export const authService = {
   async login(data: LoginDto): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/auth/login', data);
-    
-    const token = response.data.accessToken || response.data.access_token;
+
+    // Contrato unificado: el backend emite `access_token` (sin fallback camelCase).
+    const token = response.data.access_token;
     if (token) {
       await SecureStore.setItemAsync('auth_token', token);
     }
-    
+
     return response.data;
   },
 
-  async verify2FA(tempToken: string, code: string): Promise<LoginResponse> {
-    const response = await apiClient.post<LoginResponse>('/auth/2fa/verify', {
-      tempToken,
+  async verify2FA(twoFactorToken: string, code: string): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>('/auth/2fa/login', {
+      twoFactorToken,
       code,
     });
-    
-    const token = response.data.accessToken || response.data.access_token;
+
+    const token = response.data.access_token;
     if (token) {
       await SecureStore.setItemAsync('auth_token', token);
     }
-    
+
     return response.data;
   },
 

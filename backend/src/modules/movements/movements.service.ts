@@ -50,20 +50,43 @@ export class MovementsService {
    * @returns Movimiento creado con detalles del producto
    * @throws NotFoundException si el producto no existe
    * @throws BadRequestException si stock insuficiente para salida
-   * 
+   *
    * FLUJO DE VALIDACIÓN (según diagrama de actividades del SRS):
-   * 1. Verificar existencia del producto
+   * 1. Verificar existencia del producto (404) y que esté activo (400)
    * 2. Validar cantidad > 0 (ya validado por DTO)
-   * 3. Si es salida, verificar stock suficiente
-   * 4. Ejecutar transacción: crear movimiento + actualizar stock
+   * 3. Ejecutar transacción: ajustar stock de forma atómica + crear movimiento
+   *
+   * CONTROL DE CONCURRENCIA (ADR-0001, opción A — decremento condicional atómico):
+   * El patrón anterior leía `currentStock`, calculaba el nuevo valor en JavaScript y lo
+   * escribía (read-modify-write). La transacción daba atomicidad (movimiento + stock juntos)
+   * pero NO aislamiento: dos salidas simultáneas del mismo producto podían leer el mismo stock
+   * inicial y producir una escritura perdida (stock final incorrecto, hasta negativo en
+   * términos físicos).
+   *
+   * La solución: para SALIDAS usamos un `updateMany` condicional
+   * (`where: { currentStock: { gte: quantity } }` + `decrement`). La comparación y el
+   * decremento ocurren en una sola operación atómica a nivel de base de datos: si dos salidas
+   * concurren, la DB serializa el acceso a la fila y solo una puede dejar el stock en un valor
+   * válido; la otra afecta `count === 0` y se rechaza con 400. Así la invariante "el stock
+   * nunca queda negativo ni se pierden escrituras" la garantiza la DB, no JavaScript.
+   *
+   * Por qué esta opción y no `Serializable` (opción B) ni `SELECT ... FOR UPDATE` (opción C):
+   * para una invariante simple de stock, el decremento condicional es suficiente y evita la
+   * complejidad de reintentos por error de serialización o el acoplamiento a SQL crudo y el
+   * riesgo de deadlocks. Mantiene el principio KISS (SRS §19).
+   *
+   * `stockAfter`/`stockBefore` se derivan del valor REALMENTE persistido tras el ajuste, no de
+   * la lectura previa, para que el Kardex sea fiel incluso bajo concurrencia.
    */
   async create(createMovementDto: CreateMovementDto, user: AuthUser) {
     const { productId, type, quantity, reason, notes, reference, unitCost } = createMovementDto;
 
     // ============================================
-    // VALIDACIÓN DE EXISTENCIA
+    // VALIDACIÓN DE EXISTENCIA (404) Y ESTADO (400)
     // ============================================
-    // Buscar el producto para obtener el stock actual
+    // Se mantiene el findUnique previo para distinguir "producto inexistente" (404) de
+    // "stock insuficiente" (400): el updateMany condicional por sí solo no puede diferenciar
+    // ambos casos (en los dos afectaría count === 0).
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
@@ -78,37 +101,56 @@ export class MovementsService {
       throw new BadRequestException(`El producto "${product.name}" está desactivado`);
     }
 
-    // ============================================
-    // LÓGICA DE NEGOCIO: CÁLCULO DE NUEVO STOCK
-    // ============================================
-    const stockBefore = product.currentStock;
-    let stockAfter: number;
-
-    if (type === MovementType.OUT) {
-      // REGLA CRÍTICA: No permitir stock negativo
-      // Por qué: Un inventario inexacto genera pérdidas según el SRS
-      if (product.currentStock < quantity) {
-        throw new BadRequestException(
-          `Stock insuficiente para la salida. ` +
-          `Disponible: ${product.currentStock}, Solicitado: ${quantity}`
-        );
-      }
-      stockAfter = stockBefore - quantity;
-    } else {
-      // Movimiento de entrada (IN)
-      stockAfter = stockBefore + quantity;
-    }
+    // Stock disponible leído antes del ajuste (solo para el mensaje de error de stock).
+    const availableBefore = product.currentStock;
 
     // Calcular costo total si se proporciona costo unitario
     const totalCost = unitCost ? unitCost * quantity : null;
 
     // ============================================
-    // OPERACIÓN TRANSACCIONAL
+    // OPERACIÓN TRANSACCIONAL ATÓMICA
     // ============================================
-    // Usar transacción de Prisma para garantizar atomicidad (ACID)
-    // Si falla cualquier operación, ambas se revierten
-    const movement = await this.prisma.$transaction(async (tx) => {
-      // 1. Crear el registro del movimiento (histórico Kardex)
+    // Atomicidad (ACID): el ajuste de stock y el registro del movimiento ocurren juntos o
+    // ninguno. El ajuste de stock usa operaciones atómicas a nivel DB (ver JSDoc).
+    const { movement, persistedStock } = await this.prisma.$transaction(async (tx) => {
+      let stockAfter: number;
+      let stockBefore: number;
+
+      if (type === MovementType.OUT) {
+        // Decremento condicional atómico: la DB evalúa el stock suficiente y decrementa en una
+        // sola operación. Si no hay stock para esta salida, count === 0 → 400.
+        const result = await tx.product.updateMany({
+          where: { id: productId, currentStock: { gte: quantity } },
+          data: { currentStock: { decrement: quantity } },
+        });
+
+        if (result.count === 0) {
+          throw new BadRequestException(
+            `Stock insuficiente para la salida. ` +
+            `Disponible: ${availableBefore}, Solicitado: ${quantity}`
+          );
+        }
+
+        // Releer el valor realmente persistido (mantenemos el lock de fila hasta el commit, así
+        // que esta lectura refleja nuestro propio decremento, no escrituras ajenas).
+        const updated = await tx.product.findUnique({
+          where: { id: productId },
+          select: { currentStock: true },
+        });
+        stockAfter = updated!.currentStock;
+        stockBefore = stockAfter + quantity;
+      } else {
+        // Entrada (IN): incremento atómico. `update` devuelve el valor persistido.
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: { currentStock: { increment: quantity } },
+          select: { currentStock: true },
+        });
+        stockAfter = updated.currentStock;
+        stockBefore = stockAfter - quantity;
+      }
+
+      // Registrar el movimiento (histórico Kardex) con stock antes/después persistidos.
       const newMovement = await tx.movement.create({
         data: {
           productId,
@@ -143,21 +185,15 @@ export class MovementsService {
         },
       });
 
-      // 2. Actualizar el stock del producto
-      await tx.product.update({
-        where: { id: productId },
-        data: { currentStock: stockAfter },
-      });
-
-      return newMovement;
+      return { movement: newMovement, persistedStock: stockAfter };
     });
 
-    // Retornar el movimiento con stock actualizado
+    // Retornar el movimiento con el stock realmente persistido tras el ajuste atómico.
     return {
       ...movement,
       product: {
         ...movement.product,
-        currentStock: stockAfter, // Stock actualizado
+        currentStock: persistedStock,
       },
     };
   }

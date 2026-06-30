@@ -8,7 +8,6 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
 
 // Jest globals are available through @types/jest
 // Simulamos AppModule ya que puede tener configuraciones específicas

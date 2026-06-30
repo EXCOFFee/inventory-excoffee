@@ -1,5 +1,13 @@
 /**
- * Cliente HTTP base con Axios
+ * Cliente HTTP base con Axios.
+ *
+ * ⚠️ Almacenamiento del token (decisión consciente — ADR-0007 / H-10):
+ * El JWT se lee/escribe en `localStorage` (ver `auth.service.ts`). Es simple pero queda
+ * **expuesto a XSS**: cualquier script inyectado podría leerlo. Se mitiga con Helmet + CSP en
+ * el backend. La alternativa ideal —cookie `httpOnly` + `SameSite=Strict` emitida por el
+ * backend, ilegible desde JS— es un cambio mayor de la arquitectura de auth (afecta login,
+ * estos interceptores y CORS con credenciales) y se deja documentada como evolución futura, no
+ * como pendiente oculto. (El mobile sí usa almacenamiento seguro: expo-secure-store.)
  */
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';

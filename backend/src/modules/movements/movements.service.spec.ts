@@ -18,7 +18,6 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 describe('MovementsService', () => {
   let service: MovementsService;
-  let prismaService: PrismaService;
 
   // Mock de producto
   const mockProduct = {
@@ -56,6 +55,7 @@ describe('MovementsService', () => {
     product: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -69,7 +69,6 @@ describe('MovementsService', () => {
     }).compile();
 
     service = module.get<MovementsService>(MovementsService);
-    prismaService = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
   });
@@ -185,22 +184,18 @@ describe('MovementsService', () => {
     it('should create entry movement and increase stock', async () => {
       // Arrange
       mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
+      const txUpdate = jest.fn().mockResolvedValue({ currentStock: 150 });
+      const txCreate = jest.fn().mockResolvedValue({
+        ...mockMovement,
+        type: MovementType.IN,
+        quantity: 50,
+        stockBefore: 100,
+        stockAfter: 150,
+      });
       mockPrismaService.$transaction.mockImplementation(async (callback: any) => {
         return callback({
-          product: {
-            findUnique: jest.fn().mockResolvedValue(mockProduct),
-            update: jest.fn().mockResolvedValue({
-              ...mockProduct,
-              currentStock: 150,
-            }),
-          },
-          movement: {
-            create: jest.fn().mockResolvedValue({
-              ...mockMovement,
-              type: MovementType.IN,
-              quantity: 50,
-            }),
-          },
+          product: { update: txUpdate, updateMany: jest.fn(), findUnique: jest.fn() },
+          movement: { create: txCreate },
         });
       });
 
@@ -209,6 +204,15 @@ describe('MovementsService', () => {
 
       // Assert
       expect(result).toBeDefined();
+      // IN usa incremento atómico (no read-modify-write).
+      expect(txUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'product-uuid-123' },
+          data: { currentStock: { increment: 50 } },
+        }),
+      );
+      // stockAfter se deriva del valor persistido (150).
+      expect(result.product.currentStock).toBe(150);
       expect(mockPrismaService.$transaction).toHaveBeenCalled();
     });
 
@@ -250,22 +254,21 @@ describe('MovementsService', () => {
     it('should create exit movement and decrease stock', async () => {
       // Arrange
       mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
+      // Decremento condicional atómico: count === 1 (hubo stock suficiente).
+      const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+      // Relectura del valor persistido tras el decremento (100 - 30 = 70).
+      const txFindUnique = jest.fn().mockResolvedValue({ currentStock: 70 });
+      const txCreate = jest.fn().mockResolvedValue({
+        ...mockMovement,
+        type: MovementType.OUT,
+        quantity: 30,
+        stockBefore: 100,
+        stockAfter: 70,
+      });
       mockPrismaService.$transaction.mockImplementation(async (callback: any) => {
         return callback({
-          product: {
-            findUnique: jest.fn().mockResolvedValue(mockProduct),
-            update: jest.fn().mockResolvedValue({
-              ...mockProduct,
-              currentStock: 70,
-            }),
-          },
-          movement: {
-            create: jest.fn().mockResolvedValue({
-              ...mockMovement,
-              type: MovementType.OUT,
-              quantity: 30,
-            }),
-          },
+          product: { updateMany: txUpdateMany, findUnique: txFindUnique, update: jest.fn() },
+          movement: { create: txCreate },
         });
       });
 
@@ -274,12 +277,27 @@ describe('MovementsService', () => {
 
       // Assert
       expect(result).toBeDefined();
+      // OUT usa updateMany condicional (gte) en vez de un update directo.
+      expect(txUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'product-uuid-123', currentStock: { gte: 30 } },
+        data: { currentStock: { decrement: 30 } },
+      });
+      // stockAfter se deriva del valor realmente persistido (70).
+      expect(result.product.currentStock).toBe(70);
     });
 
     it('should throw BadRequestException when insufficient stock', async () => {
       // Arrange
       const lowStockProduct = { ...mockProduct, currentStock: 10 };
       mockPrismaService.product.findUnique.mockResolvedValue(lowStockProduct);
+      // El decremento condicional no afecta filas (count === 0) → stock insuficiente.
+      const txUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
+      mockPrismaService.$transaction.mockImplementation(async (callback: any) => {
+        return callback({
+          product: { updateMany: txUpdateMany, findUnique: jest.fn(), update: jest.fn() },
+          movement: { create: jest.fn() },
+        });
+      });
 
       const exitDto = {
         ...createExitDto,
@@ -290,6 +308,67 @@ describe('MovementsService', () => {
       await expect(
         service.create(exitDto, mockAuthUser)
       ).rejects.toThrow(BadRequestException);
+    });
+
+    /**
+     * Test de concurrencia (ADR-0001): dos salidas simultáneas sobre el mismo producto con
+     * stock para solo una. El decremento condicional atómico garantiza que exactamente una
+     * tenga éxito y la otra sea rechazada con 400, sin que el stock quede negativo.
+     *
+     * Se simula a nivel de mock: el `updateMany` afecta count=1 la primera vez (gana la carrera)
+     * y count=0 la segunda (la DB ya dejó el stock por debajo de `quantity`).
+     */
+    it('should let only one of two concurrent OUT movements succeed', async () => {
+      // Producto con stock 5; cada salida pide 5 → solo una puede tener éxito.
+      const product = { ...mockProduct, currentStock: 5 };
+      mockPrismaService.product.findUnique.mockResolvedValue(product);
+
+      // Estado de stock compartido que la "DB" decrementa atómicamente.
+      let dbStock = 5;
+      const exitDto = { ...createExitDto, quantity: 5 };
+
+      mockPrismaService.$transaction.mockImplementation(async (callback: any) => {
+        return callback({
+          product: {
+            updateMany: jest.fn().mockImplementation(async ({ where, data }: any) => {
+              // Emula `WHERE currentStock >= quantity ... SET currentStock -= quantity`.
+              const required = where.currentStock.gte;
+              const dec = data.currentStock.decrement;
+              if (dbStock >= required) {
+                dbStock -= dec;
+                return { count: 1 };
+              }
+              return { count: 0 };
+            }),
+            findUnique: jest.fn().mockImplementation(async () => ({ currentStock: dbStock })),
+            update: jest.fn(),
+          },
+          movement: {
+            create: jest.fn().mockImplementation(async ({ data }: any) => ({
+              ...mockMovement,
+              type: MovementType.OUT,
+              quantity: data.quantity,
+              stockBefore: data.stockBefore,
+              stockAfter: data.stockAfter,
+            })),
+          },
+        });
+      });
+
+      // Act: lanzar ambas en paralelo.
+      const results = await Promise.allSettled([
+        service.create(exitDto, mockAuthUser),
+        service.create(exitDto, mockAuthUser),
+      ]);
+
+      // Assert: exactamente una OK, una rechazada con BadRequestException, stock final no negativo.
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(BadRequestException);
+      expect(dbStock).toBe(0);
+      expect(dbStock).toBeGreaterThanOrEqual(0);
     });
   });
 });

@@ -55,3 +55,6 @@ prisma/*.db-journal
 # Temporary
 tmp/
 temp/
+
+# Local PostgreSQL without Docker
+backend/.local-pgdata/

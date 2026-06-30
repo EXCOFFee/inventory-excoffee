@@ -11,6 +11,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MovementType } from '@prisma/client';
 import {
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -43,7 +44,9 @@ export class CreateMovementDto {
     example: 10,
     minimum: 1,
   })
-  @IsNumber({}, { message: 'La cantidad debe ser un número' })
+  // El stock se maneja en unidades enteras (Int en el schema): rechazar decimales como 2.5
+  // evita stocks fraccionarios inconsistentes (H-11).
+  @IsInt({ message: 'La cantidad debe ser un número entero' })
   @Min(1, { message: 'La cantidad debe ser mayor a 0' })
   @Type(() => Number)
   quantity: number;
