@@ -212,7 +212,13 @@ pnpm test:e2e
 # Frontend
 cd frontend
 pnpm test:run
+
+# Mobile (smoke test del store)
+cd mobile
+pnpm test
 ```
+
+> **Cobertura de CI:** el pipeline de GitHub Actions (`.github/workflows/ci.yml`) corre lint + tests + build de **backend** y **frontend**. La app **mobile** tiene tests (smoke del `authStore`) que se corren localmente, pero **todavía no está cubierta por el CI** — agregar un job `mobile` al pipeline queda como **mejora futura**.
 
 ## 🚀 Deployment
 
