@@ -198,23 +198,22 @@ Criterios de aceptación:
 - [x] Arranque en prod sin `CORS_ORIGIN` o con secreto de ejemplo → falla con mensaje claro. → verificado (exit 1).
 - [x] `pnpm build` verde. → build + 105 tests + lint 0.
 
-### [ ] P2-QUERY · Filtrar stock bajo en la base de datos
+### [x] P2-QUERY · Filtrar stock bajo en la base de datos
 **Ref:** SDD H-06 · ADR-0005
 **Archivos:** `alerts.service.ts` (`checkLowStock`), `reports.service.ts` (`getDashboard`)
 
 Pasos:
-- [ ] Reemplazar el `findMany` + `.filter()` por `prisma.$queryRaw` **parametrizado** que
-      filtre `current_stock <= min_stock` a nivel SQL.
-- [ ] Mantener la distinción del dashboard: low = `currentStock <= minStock && currentStock > 0`,
+- [x] Reemplazar el `findMany` + `.filter()` por `prisma.$queryRaw` (tagged template, sin
+      interpolación) que filtra `current_stock <= min_stock` a nivel SQL.
+- [x] Mantener la distinción del dashboard: low = `currentStock <= minStock && currentStock > 0`,
       out = `currentStock = 0`.
-- [ ] JSDoc explicando por qué `$queryRaw` (limitación de comparación columna-vs-columna en
-      Prisma), no es anti-patrón.
+- [x] JSDoc explicando por qué `$queryRaw` (limitación columna-vs-columna en Prisma).
 
 Criterios de aceptación:
-- [ ] Test de equivalencia: el conjunto de productos reportados es idéntico al anterior.
-- [ ] La query usa el índice `currentStock` y no trae todos los productos a memoria.
-- [ ] `$queryRaw` es parametrizado (sin interpolación de strings).
-- [ ] `pnpm test`, `pnpm build` verdes.
+- [x] Test de equivalencia: el conjunto reportado es idéntico al anterior. → verificado contra DB real (borde stock 0/<min/=min/>min): alerts [P0,P1,P2], dashboard 2, iguales al filtro JS.
+- [x] La query usa el índice `currentStock` y no trae todos los productos a memoria.
+- [x] `$queryRaw` es parametrizado (sin interpolación de strings).
+- [x] `pnpm test`, `pnpm build` verdes. → 108 tests; lint 0.
 
 ---
 
