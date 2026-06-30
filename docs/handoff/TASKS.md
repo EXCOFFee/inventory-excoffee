@@ -238,19 +238,19 @@ Criterios de aceptación:
 - [x] El login del README (admin@inventorypro.com / Admin123!) funciona contra el stack
       dockerizado. → verificado: login admin **y** staff → 200; tras `restart` sigue Up y login 200.
 
-### [ ] P2-DTO · Endurecer validación de DTOs
+### [x] P2-DTO · Endurecer validación de DTOs
 **Ref:** SDD H-11 y H-12
-**Archivos:** `movements/dto/create-movement.dto.ts`, `auth/dto/login.dto.ts`
+**Archivos:** `movements/dto/create-movement.dto.ts`, `auth/dto/login.dto.ts`, `products/dto/create-product.dto.ts`
 
 Pasos:
-- [ ] `quantity`: cambiar `@IsNumber()` por `@IsInt()` (el stock es entero). Aplicar a otros
-      campos de unidades si los hay.
-- [ ] Alinear la política de contraseña del login con la del registro (longitud coherente;
-      quitar regex de formato en login, ya que la fortaleza se exige al crear el usuario).
+- [x] `quantity`: `@IsNumber()` → `@IsInt()`. Otros campos de unidades: `currentStock`/`minStock`/
+      `maxStock` del producto también `@IsInt()`.
+- [x] Alinear la política de contraseña del login con la del registro (MinLength 6 → 8; sin regex
+      de formato en login).
 
 Criterios de aceptación:
-- [ ] Test: `quantity: 2.5` → 400; `quantity: 3` → OK.
-- [ ] Los DTOs de login y register son coherentes; tests de auth verdes.
+- [x] Test: `quantity: 2.5` → 400; `quantity: 3` → OK. → `create-movement.dto.spec.ts`.
+- [x] Los DTOs de login y register son coherentes; tests de auth verdes. → 108 tests verdes.
 
 ### [ ] P2-XSS · Documentar (o mejorar) el storage del token web
 **Ref:** SDD H-10 · ADR-0007
