@@ -216,21 +216,25 @@ Criterios de aceptación:
 
 ---
 
-### [ ] P2-SEED · Hacer que el seed corra en la imagen Docker de producción
+### [x] P2-SEED · Hacer que el seed corra en la imagen Docker de producción
 **Ref:** SDD H-13 · TASKS
-**Archivos:** `backend/docker-entrypoint.sh`, `backend/package.json`, `backend/Dockerfile`
+**Archivos:** `backend/docker-entrypoint.sh`, `backend/Dockerfile`, `backend/prisma/seed.ts`
 
 Pasos:
-- [ ] Precompilar el seed a JS en el build (p. ej. `tsc prisma/seed.ts` → `prisma/seed.js`) y
-      que el entrypoint corra `node prisma/seed.js`. (Alternativa: mover `ts-node` a deps; menos
-      preferible por tamaño de imagen.)
-- [ ] Quitar el `|| echo "..."` que oculta fallos reales del seed (o dejar un log que distinga
-      "ya sembrado" de "falló").
+- [x] Precompilar el seed a JS en el build (`tsc prisma/seed.ts` → `prisma/seed.js`) y que el
+      entrypoint corra `node prisma/seed.js`.
+- [x] Quitar el `|| echo "..."` que oculta fallos reales del seed.
+
+> Para que la imagen realmente corriera hubo que arreglar 3 bugs Docker pre-existentes (mismo
+> commit 16bd77e): (1) pin `pnpm@10` (latest resolvía a v11, incompatible con Node 20);
+> (2) copiar `.npmrc` antes del install (node-linker=hoisted) para que `@prisma/client` resuelva
+> (sin esto, build con 143 errores TS); (3) `CMD node dist/src/main` (nest build anida en
+> dist/src/). Y se agregó una guarda de idempotencia al seed para que un restart no crashee.
 
 Criterios de aceptación:
-- [ ] `docker-compose up --build` desde cero levanta la DB **con** los usuarios demo.
-- [ ] El login del README (admin@inventorypro.com / Admin123!) funciona contra el stack
-      dockerizado.
+- [x] `docker-compose up --build` desde cero levanta la DB **con** los usuarios demo. → verificado.
+- [x] El login del README (admin@inventorypro.com / Admin123!) funciona contra el stack
+      dockerizado. → verificado: login admin **y** staff → 200; tras `restart` sigue Up y login 200.
 
 ### [ ] P2-DTO · Endurecer validación de DTOs
 **Ref:** SDD H-11 y H-12
