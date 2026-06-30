@@ -9,6 +9,25 @@ reclutadores · **P2** = pulido / hardening.
 
 ---
 
+## ⚠️ Nota: refresh de dependencias preexistente (NO auditado, separado de H-01..H-14)
+
+La rama `remediation/p0` incluye una **actualización mayor de dependencias** que **ya estaba sin
+commitear en el working tree antes de empezar la remediación** — NO es un hallazgo de la auditoría
+(H-01..H-14) ni lo introdujo este trabajo:
+- **backend:** NestJS 10→11, Prisma 5→6, bcrypt 5→6, ESLint 8→9 (de ahí el flat config de P1-LINT),
+  Jest 29→30, TypeScript 5.3→5.9; + tooling de Postgres local (`scripts/local-db.js`, scripts `db:*`).
+- **frontend:** React 18→19, react-router 6→7, Vite 5→7, ESLint 8→9, zustand 4→5.
+- **mobile:** zustand 4→5 (el `ts-jest` sí lo agregó la remediación, para el smoke test de P1-TESTS).
+
+La remediación lo **encontró** sin commitear y verificó que el código P0–P2 sigue compilando y con
+los tests en verde contra esas versiones (108 tests backend en verde; build limpio del backend en
+Docker/Linux). El gate de **instalación 100% limpia + tests** es el **CI** (la instalación limpia
+local no se completó por el rebuild nativo de `bcrypt`, CLAUDE.md §2). Se commitea **por separado**
+(`chore(deps,*)`) para que el cambio de versiones quede trazable y no se mezcle con la narrativa de
+bugfixes auditados.
+
+---
+
 ## P0 — Crítico (bloqueante)
 
 ### [x] P0-1 · Eliminar la race condition en el registro de movimientos
