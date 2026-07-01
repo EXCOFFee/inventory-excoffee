@@ -13,9 +13,13 @@ export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  // "Despertando": el backend en Render (free tier) puede tardar ~30s en el primer acceso.
+  // Si la respuesta tarda más de 3s, mostramos un aviso; se limpia al llegar la respuesta.
+  const [wakingUp, setWakingUp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const wakeTimer = setTimeout(() => setWakingUp(true), 3000);
     try {
       await login({ email, password });
       // Si el usuario tiene 2FA, el store deja `requires2FA` en true: no navegamos, la UI
@@ -25,16 +29,23 @@ export const LoginPage: React.FC = () => {
       }
     } catch {
       // Error handled in store
+    } finally {
+      clearTimeout(wakeTimer);
+      setWakingUp(false);
     }
   };
 
   const handleVerify2FA = async (e: React.FormEvent) => {
     e.preventDefault();
+    const wakeTimer = setTimeout(() => setWakingUp(true), 3000);
     try {
       await verify2FA(code);
       navigate('/');
     } catch {
       // Error handled in store
+    } finally {
+      clearTimeout(wakeTimer);
+      setWakingUp(false);
     }
   };
 
@@ -74,6 +85,16 @@ export const LoginPage: React.FC = () => {
               ? 'Ingresa el código de 6 dígitos de tu app autenticadora'
               : 'Ingresa tus credenciales para continuar'}
           </p>
+
+          {wakingUp && (
+            <div className="mb-6 p-4 bg-primary-500/10 border border-primary-500/30 rounded-xl text-primary-300 text-sm flex items-center gap-3 backdrop-blur-sm">
+              <svg className="animate-spin h-5 w-5 text-primary-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>⚡ El servidor está despertando, esto puede tomar ~30 segundos en el primer acceso...</span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-danger-500/10 border border-danger-500/30 rounded-xl text-danger-400 text-sm flex items-center justify-between backdrop-blur-sm">

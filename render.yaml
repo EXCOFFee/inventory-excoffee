@@ -1,0 +1,42 @@
+# ============================================
+# Render Blueprint — Backend de InventoryPro (NestJS + Prisma + Supabase)
+# ============================================
+# Render detecta este archivo al crear un "Blueprint" (o New > Web Service) desde el repo.
+# ⚠️ NO hardcodear secretos: las variables con `sync: false` se cargan a mano en el dashboard
+#    de Render (Environment). Acá solo van sus NOMBRES.
+#
+# Notas:
+# - rootDir: backend  -> Render corre los comandos dentro de backend/ (usa su .npmrc y lockfile).
+# - corepack prepara pnpm@10 (el proyecto usa pnpm 10; pnpm@latest ya es v11 e incompatible con Node 20).
+# - startCommand corre migraciones + seed (idempotente) antes de arrancar, así la demo tiene usuarios.
+#   Usa `npx prisma`/`node` (no pnpm) para no depender de pnpm en runtime.
+
+services:
+  - type: web
+    name: inventorypro-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    buildCommand: corepack enable && corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile && pnpm prisma generate && pnpm build
+    startCommand: npx prisma migrate deploy && node dist/prisma/seed.js && node dist/src/main
+    envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: PORT
+        value: "3000"
+      - key: NODE_VERSION
+        value: "20"
+      # --- Secretos / valores por entorno (cargar en el dashboard de Render) ---
+      # Supabase > Project Settings > Database > Connection string > "Transaction"/Pooling (:6543)
+      - key: DATABASE_URL
+        sync: false
+      # Supabase > Project Settings > Database > Connection string > "Direct connection" (:5432)
+      - key: DIRECT_URL
+        sync: false
+      # Secreto fuerte y único: openssl rand -base64 48
+      - key: JWT_SECRET
+        sync: false
+      # URL del frontend en Vercel, p. ej. https://inventorypro.vercel.app (sin barra final)
+      - key: CORS_ORIGIN
+        sync: false

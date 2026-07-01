@@ -2,6 +2,15 @@
 
 Sistema de gestión de inventarios avanzado desarrollado con tecnologías modernas para PyMEs.
 
+## 🌐 Demo en vivo
+
+- 🖥️ **Frontend:** https://inventorypro.vercel.app  _(reemplazar con la URL real de Vercel)_
+- 📡 **API / Swagger:** https://inventorypro-api.onrender.com/api/docs  _(reemplazar con la URL real de Render)_
+
+**Credenciales demo:** `admin@inventorypro.com` / `Admin123!` — o `almacen@inventorypro.com` / `Staff123!`
+
+> ⚡ **Primera carga:** el backend está en el free tier de Render y puede tardar **~30 segundos en despertar** en el primer acceso (la pantalla de login lo avisa). Las siguientes peticiones son instantáneas.
+
 ## 🚀 Tecnologías
 
 ### Backend
@@ -222,14 +231,26 @@ pnpm test
 
 ## 🚀 Deployment
 
-### Producción con Docker
+Hay dos caminos: **Docker** (self-hosting / local) y **Cloud gratis** (Vercel + Render + Supabase).
+
+### Opción A — Cloud gratis (Vercel + Render + Supabase)
+
+Ideal para una demo pública sin instalar nada. Resumen (guía detallada paso a paso en **[docs/DEPLOY.md](docs/DEPLOY.md)**):
+
+1. **Supabase** (base de datos): crear proyecto y copiar las dos connection strings — *Pooling* (`:6543`, para `DATABASE_URL`) y *Direct* (`:5432`, para `DIRECT_URL`).
+2. **Render** (backend): New → Blueprint (detecta `render.yaml`) o Web Service apuntando a `backend/`. Cargar env vars: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `NODE_ENV=production`. El deploy corre `migrate deploy` + seed y expone el health check en `/health`.
+3. **Vercel** (frontend): Import Project → root `frontend/` (detecta `vercel.json`). Cargar `VITE_API_URL=https://<tu-backend>.onrender.com/api`.
+4. **Post-deploy:** actualizar `CORS_ORIGIN` en Render con la URL real de Vercel, y reemplazar los placeholders de "Demo en vivo" de este README.
+
+### Opción B — Producción con Docker (self-hosting)
 ```bash
 docker-compose up -d --build
 ```
 
 ### Variables de Entorno de Producción
 Asegúrate de configurar:
-- `DATABASE_URL` - URL de PostgreSQL
+- `DATABASE_URL` - URL de PostgreSQL (en Supabase: **pooling**, `:6543`).
+- `DIRECT_URL` - Conexión **directa** a PostgreSQL para migraciones (en Supabase: `:5432`). En local, igual a `DATABASE_URL`.
 - `JWT_SECRET` - Secreto para tokens JWT. **⚠️ Obligatorio cambiarlo en producción**: no uses el valor de ejemplo de `.env.example` / `docker-compose.yml`. Generá uno fuerte, por ejemplo con `openssl rand -base64 48`.
 - `CORS_ORIGIN` - **Obligatorio en producción**: orígenes permitidos separados por comas (no `*`), p. ej. `https://app.midominio.com`. En desarrollo el default es `http://localhost:5173`.
 - `NODE_ENV=production`

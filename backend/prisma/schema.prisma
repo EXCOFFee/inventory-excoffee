@@ -14,8 +14,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // url: conexión de runtime. En Supabase es la de POOLING (pgBouncer, puerto 6543).
+  url       = env("DATABASE_URL")
+  // directUrl: conexión DIRECTA (puerto 5432), usada SOLO por Prisma Migrate (no puede correr
+  // contra pgBouncer). En local (sin pooling) puede ser igual a DATABASE_URL. Requerido por Supabase.
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================
