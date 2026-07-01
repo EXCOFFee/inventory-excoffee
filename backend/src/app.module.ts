@@ -25,6 +25,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { EmailModule } from './common/email/email.module';
+import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CategoriesModule } from './modules/categories/categories.module';
@@ -88,6 +89,8 @@ import { AlertsModule } from './modules/alerts/alerts.module';
     // ============================================
     // MÓDULOS DE NEGOCIO
     // ============================================
+    // Health check (para Render); responde en GET /health (excluido del prefijo api)
+    HealthModule,
     // Importados en orden de dependencias
     AuthModule,
     UsersModule,

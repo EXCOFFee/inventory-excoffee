@@ -12,7 +12,7 @@
  */
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -83,7 +83,10 @@ async function bootstrap() {
   // ============================================
   // PREFIJO GLOBAL DE API
   // ============================================
-  app.setGlobalPrefix('api');
+  // Todas las rutas quedan bajo /api EXCEPTO el health check, que Render espera en /health.
+  app.setGlobalPrefix('api', {
+    exclude: [{ path: 'health', method: RequestMethod.GET }],
+  });
 
   // ============================================
   // CONFIGURACIÓN DE SWAGGER (OpenAPI)

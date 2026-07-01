@@ -43,6 +43,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inventory_pro?schema=public
+      # DIRECT_URL lo exige prisma migrate (el schema declara directUrl). En local no hay pooling,
+      # así que apunta al mismo Postgres que DATABASE_URL.
+      DIRECT_URL: postgresql://postgres:postgres@postgres:5432/inventory_pro?schema=public
       # Default de DEMO (no es el valor de .env.example, así pasa el fail-fast de prod).
       # ⚠️ Para un despliegue real, exportá JWT_SECRET con un secreto fuerte y único.
       JWT_SECRET: ${JWT_SECRET:-inventorypro-demo-secret-change-me-in-real-prod}
