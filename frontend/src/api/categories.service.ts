@@ -41,7 +41,8 @@ export const categoriesService = {
    * Actualizar categoría
    */
   async update(id: string, category: UpdateCategoryDto): Promise<Category> {
-    const { data } = await apiClient.patch<Category>(`/categories/${id}`, category);
+    // El backend expone @Put(':id') para el update (ver H-15); debe ser PUT, no PATCH.
+    const { data } = await apiClient.put<Category>(`/categories/${id}`, category);
     return data;
   },
 

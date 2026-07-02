@@ -9,7 +9,7 @@ import { Button, Input, Select, Table, Modal, EmptyState, ExportButton } from '.
 import { useNotificationStore, useAuthStore } from '../../stores';
 import { useModal } from '../../hooks';
 import { formatDate } from '../../utils';
-import apiClient from '../../api/client';
+import { usersService, type CreateUserDto, type UpdateUserDto } from '../../api';
 
 // Iconos SVG
 const UsersIcon = () => (
@@ -47,43 +47,6 @@ const LockIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
   </svg>
 );
-
-// Types
-interface CreateUserDto {
-  email: string;
-  password: string;
-  name: string;
-  role: 'ADMIN' | 'STAFF';
-}
-
-interface UpdateUserDto {
-  email?: string;
-  name?: string;
-  role?: 'ADMIN' | 'STAFF';
-  password?: string;
-}
-
-// Inline API service for users
-const usersService = {
-  async getAll(): Promise<User[]> {
-    const { data } = await apiClient.get<User[]>('/users');
-    return data;
-  },
-
-  async create(user: CreateUserDto): Promise<User> {
-    const { data } = await apiClient.post<User>('/users', user);
-    return data;
-  },
-
-  async update(id: string, user: UpdateUserDto): Promise<User> {
-    const { data } = await apiClient.patch<User>(`/users/${id}`, user);
-    return data;
-  },
-
-  async delete(id: string): Promise<void> {
-    await apiClient.delete(`/users/${id}`);
-  },
-};
 
 export const UsersPage: React.FC = () => {
   const queryClient = useQueryClient();
