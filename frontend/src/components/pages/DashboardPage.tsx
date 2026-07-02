@@ -21,10 +21,6 @@ export const DashboardPage: React.FC = () => {
     queryFn: () => alertsService.getUnread(),
   });
 
-  // Datos de tendencia de movimientos para el gráfico
-  // Usamos datos demo ya que el endpoint no existe aún
-  const movementTrend: any[] = [];
-
   // Datos de distribución por categoría
   const categoryDistribution = useMemo(() => {
     if (!kpis?.categoryDistribution) return [];
@@ -44,23 +40,17 @@ export const DashboardPage: React.FC = () => {
     }));
   }, [kpis?.topProducts]);
 
-  // Datos de tendencia (mock si no hay API)
-  const trendData = useMemo(() => {
-    if (movementTrend && Array.isArray(movementTrend) && movementTrend.length > 0) {
-      return movementTrend;
-    }
-    // Datos demo para visualización
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(today);
-      date.setDate(date.getDate() - (6 - i));
-      return {
-        date: date.toLocaleDateString('es', { weekday: 'short', day: 'numeric' }),
-        entradas: Math.floor(Math.random() * 50) + 10,
-        salidas: Math.floor(Math.random() * 40) + 5,
-      };
-    });
-  }, [movementTrend]);
+  // Tendencia REAL de movimientos (últimos 7 días) desde el backend (ver H-17).
+  // Antes esto generaba números aleatorios: un gráfico decorativo que mentía.
+  const trendData = useMemo(
+    () =>
+      (kpis?.movementTrend ?? []).map((m) => ({
+        date: new Date(m.date).toLocaleDateString('es', { weekday: 'short', day: 'numeric' }),
+        entradas: m.totalIn,
+        salidas: m.totalOut,
+      })),
+    [kpis?.movementTrend],
+  );
 
   if (loadingKPIs) {
     return (

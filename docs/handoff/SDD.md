@@ -11,9 +11,10 @@ README, alineación SRS↔código. **Auditoría exhaustiva: backend + frontend +
 > **Nota de versión:** Este SDD fue ampliado tras una segunda pasada que cubrió frontend,
 > mobile, tests e infraestructura (hallazgos H-08 a H-13). La primera pasada cubría solo el
 > núcleo crítico del backend (H-01 a H-07). H-14 se añadió durante la ejecución de las
-> tareas P0, al descubrirse deuda preexistente en la configuración de lint. **H-15 y H-16 se
-> añadieron durante una auditoría de contrato frontend↔backend posterior al deploy cloud, al
-> encontrar el mismo patrón de H-08 replicado en otros módulos (updates y reportes).**
+> tareas P0, al descubrirse deuda preexistente en la configuración de lint. **H-15, H-16 y H-17
+> se añadieron durante una auditoría de contrato frontend↔backend posterior al deploy cloud, al
+> encontrar el mismo patrón de H-08 replicado en otros módulos (updates, reportes y el dashboard
+> completo).**
 
 ---
 
@@ -474,6 +475,45 @@ coincida con el tipo consumido; si no, ajustar el tipo del front.)
 - Smoke test: `getStockoutReport()`/`getCategoryDistribution()` pegan a `/reports/low-stock` y
   `/reports/by-category`.
 - La página de Reportes carga sin 404 en consola.
+
+---
+
+### H-17 🔴 CRÍTICO — El dashboard entero muestra datos falsos (contrato desalineado + gráfico random)
+**Archivos:** `backend/src/modules/reports/reports.service.ts` (`getDashboard`), `frontend/src/components/pages/DashboardPage.tsx`.
+**Frontend espera:** el tipo `DashboardKPIs` (`stockValuation`, conteos, `topProducts`, `categoryDistribution`, `movementTrend`, `recentAlerts`).
+**Descubierto durante:** la implementación del gráfico de tendencia; al investigar, el problema no era solo el gráfico sino **todo** el contrato del dashboard.
+**Ref:** mismo espíritu decorativo que **H-02** (2FA decorativo) + familia de contrato **H-08/H-15/H-16**.
+
+**QUÉ.** `GET /reports/dashboard` devolvía `{ products, inventory, entities, movements }`, pero el
+frontend lee `kpis.stockValuation`, `kpis.lowStockCount`, `kpis.outOfStockCount`, `kpis.topProducts`,
+`kpis.categoryDistribution`, `kpis.movementTrend`, etc. **Ninguno** de esos campos existía en la
+respuesta → todos los KPIs de la primera pantalla caían a `undefined → 0` y las secciones "Productos
+Más Movidos" y "Distribución por Categoría" quedaban vacías. Peor: la "Tendencia de Movimientos" no
+tenía fuente, así que el componente **generaba números aleatorios** (`Math.random()`) en cada carga:
+un gráfico decorativo que mentía.
+
+**POR QUÉ importa.** Es la **primera pantalla** que ve un reclutador, y estaba enteramente vacía/falsa
+no por falta de datos sino por contrato roto. El gráfico con datos inventados es exactamente el tipo
+de "feature decorativa" que H-02 (aparenta funcionar sin hacerlo).
+
+**CÓMO (causa raíz).** El backend `getDashboard` se implementó con una forma distinta a la que la UI
+(más rica) consume, y nunca proveyó `topProducts`/`categoryDistribution`/`movementTrend`; la UI los
+suplía con vacío/aleatorio.
+
+**Fix decidido (enriquecer el backend, back→front).** Excepción consciente al criterio habitual
+front→back (H-08/H-15/H-16): acá el backend era *más pobre* que la UI, así que alinear al revés
+implicaría borrar secciones. `getDashboard` ahora devuelve el contrato `DashboardKPIs` completo:
+`stockValuation`, `lowStockCount`, `outOfStockCount`, movimientos hoy/mes, `recentAlerts` (alertas
+activas), `topProducts` (por cantidad movida en 30 días, con `turnoverRate`), `categoryDistribution`
+y un `movementTrend` **real** agrupado por día (últimos 7 días, rellenando días sin movimientos). El
+frontend elimina el bloque `Math.random()` y consume `kpis.movementTrend`.
+
+**VERIFICACIÓN.**
+- Backend (`reports.service.spec`): `getDashboard` devuelve el contrato completo (valuación, conteos,
+  alertas, `topProducts`, `categoryDistribution` y trend de 7 días).
+- Frontend (`DashboardPage.test`): espía el gráfico y comprueba que recibe la data real de
+  `movementTrend`, no valores aleatorios.
+- `pnpm build`/`test` verdes en backend y frontend.
 
 ---
 

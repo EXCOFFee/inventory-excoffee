@@ -133,10 +133,26 @@ Criterios de aceptación:
 - [ ] `ReportsPage` carga sin 404 en consola.
 - [ ] `pnpm build` (tsc) del frontend verde.
 
-> 🔎 Los métodos muertos detectados en la misma auditoría (`movementsService.getRecent`,
+### [x] P0-DASHBOARD · Dashboard con datos falsos (contrato desalineado + gráfico random)
+**Ref:** SDD H-17 (espíritu de H-02; familia de contrato H-08/H-15/H-16)
+**Archivos:** `backend/src/modules/reports/reports.service.ts` (`getDashboard`),
+`frontend/src/components/pages/DashboardPage.tsx`
+
+Pasos:
+1. Reescribir `getDashboard` para devolver el contrato `DashboardKPIs` completo: `stockValuation`,
+   `lowStockCount`, `outOfStockCount`, movimientos hoy/mes, `recentAlerts`, `topProducts`,
+   `categoryDistribution` y `movementTrend` real (agrupado por día, últimos 7, rellenando huecos).
+2. Frontend: borrar el bloque `Math.random()` de `DashboardPage` y consumir `kpis.movementTrend`.
+
+Criterios de aceptación:
+- [x] Backend: `getDashboard` devuelve el contrato completo (test en `reports.service.spec`).
+- [x] Frontend: `DashboardPage` alimenta el gráfico con la data real, no aleatoria (test que espía el gráfico).
+- [x] `pnpm build`/`test` verdes en backend y frontend.
+
+> 🔎 Los 4 métodos muertos de la misma auditoría (`movementsService.getRecent`,
 > `productsService.search`, `reportsService.getMovementSummary`, `reportsService.exportReport`)
-> quedan pendientes de una decisión explícita por método (borrar vs implementar la ruta en el
-> backend) antes de tocarlos. No se incluyen en P0-CONTRACT-A/B.
+> se **BORRARON** (código muerto real; la funcionalidad existe por otro lado o no hace falta).
+> Ver commit de limpieza `chore(frontend): eliminar 4 métodos de service contra rutas inexistentes`.
 
 ## P1 — Credibilidad ante reclutadores
 
