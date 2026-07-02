@@ -1,40 +1,27 @@
 /**
- * Tipos para alertas de stock
+ * Tipos para alertas de stock.
+ *
+ * Reflejan el modelo REAL del backend (Prisma `StockAlert`): campos planos
+ * (`productSku`, `productName`, `currentStock`, `minStock`) y `acknowledged`
+ * en lugar de un objeto `product` anidado / `isRead`. El backend solo genera
+ * alertas de stock bajo/agotado; la severidad se deriva del stock, no de un
+ * campo `type`.
  */
-
-export type AlertType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'OVERSTOCK';
 
 export interface StockAlert {
   id: string;
-  type: AlertType;
-  message: string;
-  isRead: boolean;
-  productId: string;
-  product?: {
-    id: string;
-    sku: string;
-    name: string;
-    currentStock: number;
-    minStock: number;
-    maxStock?: number;
-  };
+  productSku: string;
+  productName: string;
+  currentStock: number;
+  minStock: number;
+  emailSent: boolean;
+  acknowledged: boolean;
   createdAt: string;
+  acknowledgedAt?: string | null;
 }
 
+/** Filtros soportados por el backend en `GET /alerts` (solo paginación). */
 export interface AlertFilters {
-  type?: AlertType;
-  isRead?: boolean;
-  productId?: string;
   page?: number;
   limit?: number;
-}
-
-export interface AlertStats {
-  total: number;
-  unread: number;
-  byType: {
-    LOW_STOCK: number;
-    OUT_OF_STOCK: number;
-    OVERSTOCK: number;
-  };
 }

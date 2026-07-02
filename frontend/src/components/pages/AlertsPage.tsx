@@ -1,5 +1,8 @@
 /**
  * Página de alertas de stock - Dark Theme
+ *
+ * Consume el modelo real del backend (campos planos + `acknowledged`). "Marcar
+ * como leída" reconoce la alerta (`acknowledge`); no hay borrado físico.
  */
 
 import React, { useState } from 'react';
@@ -11,6 +14,7 @@ import { useNotificationStore } from '../../stores';
 import { formatDate, formatNumber } from '../../utils';
 
 type FilterType = 'all' | 'unread' | 'read';
+type Severity = 'critical' | 'warning';
 
 // Iconos SVG
 const BellIcon = () => (
@@ -25,11 +29,18 @@ const CheckCircleIcon = () => (
   </svg>
 );
 
-const TrashIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-  </svg>
-);
+/** Severidad derivada del stock (el backend no guarda un `type`). */
+const getAlertSeverity = (alert: StockAlert): Severity => {
+  if (alert.currentStock === 0) return 'critical';
+  if (alert.currentStock <= alert.minStock / 2) return 'critical';
+  return 'warning';
+};
+
+/** Mensaje derivado a partir de los datos de la alerta. */
+const getAlertMessage = (alert: StockAlert): string =>
+  alert.currentStock === 0
+    ? 'Producto agotado (sin stock).'
+    : `Stock bajo: ${formatNumber(alert.currentStock)} unidades (mínimo ${formatNumber(alert.minStock)}).`;
 
 export const AlertsPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -47,7 +58,8 @@ export const AlertsPage: React.FC = () => {
     mutationFn: (id: string) => alertsService.markAsRead(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      success('Alerta actualizada', 'La alerta ha sido marcada como leída');
+      queryClient.invalidateQueries({ queryKey: ['unread-alerts'] });
+      success('Alerta actualizada', 'La alerta ha sido reconocida');
     },
     onError: (err: Error) => {
       error('Error', err.message || 'No se pudo actualizar la alerta');
@@ -58,40 +70,22 @@ export const AlertsPage: React.FC = () => {
     mutationFn: () => alertsService.markAllAsRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      success('Alertas actualizadas', 'Todas las alertas han sido marcadas como leídas');
+      queryClient.invalidateQueries({ queryKey: ['unread-alerts'] });
+      success('Alertas actualizadas', 'Todas las alertas han sido reconocidas');
     },
     onError: (err: Error) => {
       error('Error', err.message || 'No se pudieron actualizar las alertas');
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => alertsService.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      success('Alerta eliminada', 'La alerta ha sido eliminada');
-    },
-    onError: (err: Error) => {
-      error('Error', err.message || 'No se pudo eliminar la alerta');
-    },
-  });
-
-  // Filtered alerts
+  // Filtered alerts (activa = no reconocida)
   const filteredAlerts = alerts.filter((alert: StockAlert) => {
-    if (filter === 'unread') return !alert.isRead;
-    if (filter === 'read') return alert.isRead;
+    if (filter === 'unread') return !alert.acknowledged;
+    if (filter === 'read') return alert.acknowledged;
     return true;
   });
 
-  const unreadCount = alerts.filter((a: StockAlert) => !a.isRead).length;
-
-  const getAlertSeverity = (alert: StockAlert): 'critical' | 'warning' | 'info' => {
-    const currentStock = alert.product?.currentStock ?? 0;
-    const minStock = alert.product?.minStock ?? 1;
-    if (currentStock === 0) return 'critical';
-    if (currentStock <= minStock / 2) return 'critical';
-    return 'warning';
-  };
+  const unreadCount = alerts.filter((a: StockAlert) => !a.acknowledged).length;
 
   return (
     <div className="space-y-6">
@@ -105,8 +99,8 @@ export const AlertsPage: React.FC = () => {
             Alertas de Stock
           </h1>
           <p className="text-gray-400 mt-1">
-            {unreadCount > 0 
-              ? `Tienes ${unreadCount} alerta${unreadCount > 1 ? 's' : ''} sin leer`
+            {unreadCount > 0
+              ? `Tienes ${unreadCount} alerta${unreadCount > 1 ? 's' : ''} sin reconocer`
               : 'No tienes alertas pendientes'}
           </p>
         </div>
@@ -116,8 +110,8 @@ export const AlertsPage: React.FC = () => {
             onChange={(e) => setFilter(e.target.value as FilterType)}
             options={[
               { value: 'all', label: 'Todas las alertas' },
-              { value: 'unread', label: 'Sin leer' },
-              { value: 'read', label: 'Leídas' },
+              { value: 'unread', label: 'Sin reconocer' },
+              { value: 'read', label: 'Reconocidas' },
             ]}
           />
           {unreadCount > 0 && (
@@ -128,7 +122,7 @@ export const AlertsPage: React.FC = () => {
               className="flex items-center gap-2"
             >
               <CheckCircleIcon />
-              Marcar todas
+              Reconocer todas
             </Button>
           )}
         </div>
@@ -142,10 +136,7 @@ export const AlertsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-2xl font-bold text-red-400">
-              {alerts.filter((a: StockAlert) => {
-                const severity = getAlertSeverity(a);
-                return severity === 'critical' && !a.isRead;
-              }).length}
+              {alerts.filter((a: StockAlert) => getAlertSeverity(a) === 'critical' && !a.acknowledged).length}
             </p>
             <p className="text-sm text-gray-500">Críticas</p>
           </div>
@@ -157,10 +148,7 @@ export const AlertsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-2xl font-bold text-amber-400">
-              {alerts.filter((a: StockAlert) => {
-                const severity = getAlertSeverity(a);
-                return severity === 'warning' && !a.isRead;
-              }).length}
+              {alerts.filter((a: StockAlert) => getAlertSeverity(a) === 'warning' && !a.acknowledged).length}
             </p>
             <p className="text-sm text-gray-500">Advertencias</p>
           </div>
@@ -172,9 +160,9 @@ export const AlertsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-2xl font-bold text-emerald-400">
-              {alerts.filter((a: StockAlert) => a.isRead).length}
+              {alerts.filter((a: StockAlert) => a.acknowledged).length}
             </p>
-            <p className="text-sm text-gray-500">Resueltas</p>
+            <p className="text-sm text-gray-500">Reconocidas</p>
           </div>
         </div>
       </div>
@@ -184,8 +172,8 @@ export const AlertsPage: React.FC = () => {
         <div className="px-6 py-4 border-b border-gray-800/50">
           <h3 className="text-lg font-bold text-white">
             {filter === 'all' && 'Todas las Alertas'}
-            {filter === 'unread' && 'Alertas Sin Leer'}
-            {filter === 'read' && 'Alertas Leídas'}
+            {filter === 'unread' && 'Alertas Sin Reconocer'}
+            {filter === 'read' && 'Alertas Reconocidas'}
           </h3>
           <p className="text-sm text-gray-500">{filteredAlerts.length} alertas</p>
         </div>
@@ -197,29 +185,24 @@ export const AlertsPage: React.FC = () => {
           ) : filteredAlerts.length === 0 ? (
             <EmptyState
               type="no-alerts"
-              title={filter === 'unread' ? 'Sin alertas pendientes' : filter === 'read' ? 'Sin alertas leídas' : 'Sin alertas'}
-              description={filter === 'unread' 
-                ? '¡Excelente! No tienes alertas de stock sin leer'
+              title={filter === 'unread' ? 'Sin alertas pendientes' : filter === 'read' ? 'Sin alertas reconocidas' : 'Sin alertas'}
+              description={filter === 'unread'
+                ? '¡Excelente! No tienes alertas de stock sin reconocer'
                 : filter === 'read'
-                  ? 'Las alertas que marques como leídas aparecerán aquí'
+                  ? 'Las alertas que reconozcas aparecerán aquí'
                   : 'Tu inventario está en buen estado, sin alertas de stock'}
             />
           ) : (
             <div className="space-y-4">
-              {filteredAlerts.map((alert: StockAlert) => {
-                const severity = getAlertSeverity(alert);
-                return (
-                  <AlertItem
-                    key={alert.id}
-                    alert={alert}
-                    severity={severity}
-                    onMarkAsRead={() => markAsReadMutation.mutate(alert.id)}
-                    onDelete={() => deleteMutation.mutate(alert.id)}
-                    isMarkingAsRead={markAsReadMutation.isPending}
-                    isDeleting={deleteMutation.isPending}
-                  />
-                );
-              })}
+              {filteredAlerts.map((alert: StockAlert) => (
+                <AlertItem
+                  key={alert.id}
+                  alert={alert}
+                  severity={getAlertSeverity(alert)}
+                  onMarkAsRead={() => markAsReadMutation.mutate(alert.id)}
+                  isMarkingAsRead={markAsReadMutation.isPending}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -231,38 +214,28 @@ export const AlertsPage: React.FC = () => {
 // Alert Item Component
 interface AlertItemProps {
   alert: StockAlert;
-  severity: 'critical' | 'warning' | 'info';
+  severity: Severity;
   onMarkAsRead: () => void;
-  onDelete: () => void;
   isMarkingAsRead: boolean;
-  isDeleting: boolean;
 }
 
-const AlertItem: React.FC<AlertItemProps> = ({
-  alert,
-  severity,
-  onMarkAsRead,
-  onDelete,
-}) => {
-  const currentStock = alert.product?.currentStock ?? 0;
-  const minStock = alert.product?.minStock ?? 1;
+const AlertItem: React.FC<AlertItemProps> = ({ alert, severity, onMarkAsRead, isMarkingAsRead }) => {
+  const { currentStock, minStock } = alert;
 
-  const severityColors = {
+  const severityColors: Record<Severity, string> = {
     critical: 'border-red-500/30 bg-red-500/5',
     warning: 'border-amber-500/30 bg-amber-500/5',
-    info: 'border-cyan-500/30 bg-cyan-500/5',
   };
 
-  const severityIcons = {
+  const severityIcons: Record<Severity, string> = {
     critical: '🚨',
     warning: '⚠️',
-    info: 'ℹ️',
   };
 
   return (
     <div className={`rounded-xl border p-4 transition-all ${
-      alert.isRead 
-        ? 'bg-gray-900/30 border-gray-800 opacity-60' 
+      alert.acknowledged
+        ? 'bg-gray-900/30 border-gray-800 opacity-60'
         : severityColors[severity]
     }`}>
       <div className="flex items-start justify-between gap-4">
@@ -270,22 +243,22 @@ const AlertItem: React.FC<AlertItemProps> = ({
           <span className="text-2xl">{severityIcons[severity]}</span>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className={`font-semibold ${alert.isRead ? 'text-gray-500' : 'text-white'}`}>
-                {alert.product?.name || 'Producto desconocido'}
+              <h3 className={`font-semibold ${alert.acknowledged ? 'text-gray-500' : 'text-white'}`}>
+                {alert.productName || 'Producto desconocido'}
               </h3>
-              {!alert.isRead && (
+              {!alert.acknowledged && (
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                  severity === 'critical' 
-                    ? 'bg-red-500/20 text-red-400' 
+                  severity === 'critical'
+                    ? 'bg-red-500/20 text-red-400'
                     : 'bg-amber-500/20 text-amber-400'
                 }`}>
                   Nueva
                 </span>
               )}
             </div>
-            <p className="text-sm text-cyan-400 font-mono">SKU: {alert.product?.sku || 'N/A'}</p>
-            <p className="text-sm text-gray-400 mt-2">{alert.message}</p>
-            
+            <p className="text-sm text-cyan-400 font-mono">SKU: {alert.productSku || 'N/A'}</p>
+            <p className="text-sm text-gray-400 mt-2">{getAlertMessage(alert)}</p>
+
             <div className="flex items-center gap-6 mt-3 text-sm">
               <span className="text-gray-500">
                 Stock actual: <strong className={severity === 'critical' ? 'text-red-400' : 'text-amber-400'}>
@@ -306,20 +279,20 @@ const AlertItem: React.FC<AlertItemProps> = ({
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                 <span>Nivel de stock</span>
-                <span>{Math.round((currentStock / minStock) * 100)}%</span>
+                <span>{minStock > 0 ? Math.round((currentStock / minStock) * 100) : 0}%</span>
               </div>
               <div className="w-full bg-gray-800 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
                     severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'
                   }`}
-                  style={{ width: `${Math.min((currentStock / minStock) * 100, 100)}%` }}
+                  style={{ width: `${minStock > 0 ? Math.min((currentStock / minStock) * 100, 100) : 0}%` }}
                 />
               </div>
             </div>
 
             {/* Recommendation */}
-            {!alert.isRead && (
+            {!alert.acknowledged && (
               <div className="mt-3 p-3 bg-gray-800/50 rounded-lg text-sm text-gray-300">
                 <strong className="text-white">Recomendación:</strong>{' '}
                 {severity === 'critical'
@@ -331,24 +304,18 @@ const AlertItem: React.FC<AlertItemProps> = ({
             <p className="text-xs text-gray-600 mt-3">{formatDate(alert.createdAt)}</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
-          {!alert.isRead && (
+          {!alert.acknowledged && (
             <button
               onClick={onMarkAsRead}
-              className="p-2 rounded-lg text-cyan-400 hover:bg-cyan-500/10 transition-all"
-              title="Marcar como leída"
+              disabled={isMarkingAsRead}
+              className="p-2 rounded-lg text-cyan-400 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+              title="Reconocer alerta"
             >
               <CheckCircleIcon />
             </button>
           )}
-          <button
-            onClick={onDelete}
-            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-all"
-            title="Eliminar"
-          >
-            <TrashIcon />
-          </button>
         </div>
       </div>
     </div>
