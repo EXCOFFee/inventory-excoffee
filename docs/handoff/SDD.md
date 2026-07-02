@@ -11,7 +11,9 @@ README, alineación SRS↔código. **Auditoría exhaustiva: backend + frontend +
 > **Nota de versión:** Este SDD fue ampliado tras una segunda pasada que cubrió frontend,
 > mobile, tests e infraestructura (hallazgos H-08 a H-13). La primera pasada cubría solo el
 > núcleo crítico del backend (H-01 a H-07). H-14 se añadió durante la ejecución de las
-> tareas P0, al descubrirse deuda preexistente en la configuración de lint.
+> tareas P0, al descubrirse deuda preexistente en la configuración de lint. **H-15 y H-16 se
+> añadieron durante una auditoría de contrato frontend↔backend posterior al deploy cloud, al
+> encontrar el mismo patrón de H-08 replicado en otros módulos (updates y reportes).**
 
 ---
 
@@ -416,6 +418,62 @@ muchas, dejarlas como ítem aparte explícito.
 
 **VERIFICACIÓN.** `pnpm lint` ya no falla por ausencia de configuración; el número de
 violaciones restantes (idealmente 0) queda documentado; `pnpm build` sigue verde.
+
+---
+
+### H-15 🔴 CRÍTICO — Editar entidades está roto (mismatch de verbo PATCH vs PUT)
+**Archivos:** `frontend/src/api/categories.service.ts`, `products.service.ts`, `suppliers.service.ts`, y el `usersService` inline en `frontend/src/components/pages/UsersPage.tsx`.
+**Backend:** los controllers exponen `@Put(':id')` para el update de categories, products, suppliers y users.
+**Descubierto durante:** auditoría de contrato frontend↔backend posterior al deploy cloud.
+**Ref:** mismo patrón que **H-08** · TASKS P0-CONTRACT-A.
+
+**QUÉ.** El frontend actualiza con `apiClient.patch('/<entidad>/:id')`, pero el backend registra
+esas rutas con `@Put(':id')`. NestJS mapea `@Put` solo al método HTTP PUT, así que la petición
+PATCH **no matchea ninguna ruta → 404**. Resultado: **crear y borrar funcionan, pero editar
+categorías, productos, proveedores y usuarios falla** desde la UI.
+
+**POR QUÉ importa.** Es el mismo tipo de bug que H-08 (contrato front↔back que no coincide),
+replicado en cuatro pantallas de CRUD. Un reclutador que edite cualquier registro ve un error.
+Cuatro flujos de update caídos degradan fuerte la percepción de un CRUD "completo".
+
+**CÓMO (causa raíz).** El frontend se construyó asumiendo semántica PATCH (update parcial)
+mientras el backend implementó `@Put`. Nadie ejerció el flujo de edición contra el backend real.
+
+**Fix decidido.** Alinear el frontend al backend (fuente de verdad, igual criterio que H-08):
+cambiar `.patch` → `.put` en los cuatro servicios. Se descarta cambiar el backend a `@Patch`
+porque alteraría el contrato/Swagger ya desplegado sin beneficio. Se extrae además el
+`usersService` inline a `frontend/src/api/users.service.ts` para dejarlo consistente y testeable.
+
+**VERIFICACIÓN.**
+- Smoke test por servicio: `update(id, data)` invoca `apiClient.put` con `/<entidad>/${id}`.
+- `pnpm build` (tsc) verde; edición manual de cada entidad funciona de extremo a extremo.
+
+---
+
+### H-16 🟡 IMPORTANTE — Dos reportes rotos por rutas inexistentes
+**Archivo:** `frontend/src/api/reports.service.ts` (consumido por `ReportsPage.tsx`).
+**Backend:** `reports.controller.ts` expone `/reports/low-stock` y `/reports/by-category`.
+**Descubierto durante:** auditoría de contrato frontend↔backend posterior al deploy cloud.
+**Ref:** mismo patrón que **H-08** · TASKS P0-CONTRACT-B.
+
+**QUÉ.** `ReportsPage` llama a `getStockoutReport()` → `GET /reports/stockouts` y a
+`getCategoryDistribution()` → `GET /reports/category-distribution`. Ninguna de esas rutas existe
+en el backend (son `/reports/low-stock` y `/reports/by-category`) → **404**. Los otros tres
+reportes de la página (`dashboard`, `stock-valuation`, `product-velocity`) sí coinciden.
+
+**POR QUÉ importa.** La página de Reportes muestra secciones vacías/erróneas y ensucia la consola
+con 404. Es la misma clase de desalineación de contrato que H-08/H-15.
+
+**CÓMO (causa raíz).** Nombres de ruta divergentes entre el cliente y el controller reales.
+
+**Fix decidido.** Alinear el frontend al backend: `stockouts` → `low-stock`,
+`category-distribution` → `by-category`. (Verificar que el shape de la respuesta del backend
+coincida con el tipo consumido; si no, ajustar el tipo del front.)
+
+**VERIFICACIÓN.**
+- Smoke test: `getStockoutReport()`/`getCategoryDistribution()` pegan a `/reports/low-stock` y
+  `/reports/by-category`.
+- La página de Reportes carga sin 404 en consola.
 
 ---
 
