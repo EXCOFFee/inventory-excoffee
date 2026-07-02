@@ -205,18 +205,20 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Demo credentials */}
-        <div className="mt-6 glass-card p-4 text-center">
-          <p className="text-xs text-dark-500 mb-1">Credenciales de demostración</p>
-          <p className="text-sm text-dark-300 font-mono">
+        <div className="mt-6 glass-card p-5 text-center">
+          <p className="text-sm text-dark-400 mb-2">Credenciales de demostración</p>
+          <p className="text-base sm:text-lg text-primary-300 font-mono font-semibold break-words">
             admin@inventorypro.com / Admin123!
           </p>
         </div>
 
         {/* Aviso de plan free: el primer acceso puede tardar mientras el backend (Render free tier)
             despierta desde reposo. Se muestra siempre, para que el reclutador lo sepa antes de entrar. */}
-        <p className="mt-4 text-center text-xs text-dark-500">
-          ⚡ El primer acceso puede tardar ~30 segundos: el servidor gratuito se activa desde reposo.
-        </p>
+        <div className="mt-4 text-center">
+          <p className="inline-block px-4 py-2.5 rounded-xl bg-primary-500/10 border border-primary-500/25 text-sm sm:text-base text-primary-200 font-medium">
+            ⚡ El primer acceso puede tardar ~30 segundos: el servidor gratuito se activa desde reposo.
+          </p>
+        </div>
 
         {/* Footer */}
         <p className="mt-6 text-center text-xs text-dark-600">
