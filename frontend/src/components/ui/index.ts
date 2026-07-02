@@ -15,7 +15,6 @@ export { CommandPalette, useCommandPalette } from './CommandPalette';
 export { EmptyState } from './EmptyState';
 export { ExportButton } from './ExportButton';
 export { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
-export { ThemeToggle } from './ThemeToggle';
 export { ImageUpload } from './ImageUpload';
 export { PDFExport, PDFButton } from './PDFExport';
 export { NotificationToggle } from './NotificationToggle';

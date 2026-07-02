@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useAuthStore, useUIStore } from '../../stores';
-import { useCommandPalette, ThemeToggle, NotificationToggle } from '../ui';
+import { useCommandPalette, NotificationToggle } from '../ui';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -62,11 +62,8 @@ export const Header: React.FC = () => {
         </button>
       </div>
 
-      {/* Right: Theme Toggle, Notifications & User */}
+      {/* Right: Notifications & User */}
       <div className="flex items-center space-x-2 sm:space-x-3">
-        {/* Theme toggle */}
-        <ThemeToggle />
-
         {/* Push Notifications */}
         <NotificationToggle />
 
