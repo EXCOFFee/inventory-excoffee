@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ============================================
-   INVENTORYPRO - Dark/Light Theme Premium UI
+   INVENTORYPRO - Dark Theme Premium UI
    ============================================ */
 
 :root {
@@ -19,23 +19,10 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Light Theme Variables */
-.light {
-  --color-bg-dark: #f8fafc;
-  --color-bg-surface: #ffffff;
-  --color-bg-elevated: #f1f5f9;
-  --color-text: #1e293b;
-  --color-text-muted: #64748b;
-}
-
 /* Base Styles */
 @layer base {
   * {
     border-color: #3a3a50;
-  }
-
-  .light * {
-    border-color: #e2e8f0;
   }
 
   body {
@@ -46,14 +33,6 @@
       linear-gradient(135deg, #0a0a12 0%, #14141f 100%);
     background-attachment: fixed;
     min-height: 100vh;
-  }
-
-  .light body {
-    @apply bg-gray-50 text-gray-900;
-    background-image: 
-      radial-gradient(ellipse at 20% 20%, rgba(0, 128, 255, 0.05) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(0, 212, 255, 0.03) 0%, transparent 50%),
-      linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   }
 
   /* Custom Scrollbar */
@@ -97,15 +76,6 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  /* Glass Card Effect - Light */
-  .light .glass-card {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: 
-      0 4px 30px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  }
-
   .glass-card-hover {
     background: rgba(30, 30, 46, 0.8);
     backdrop-filter: blur(24px);
@@ -118,27 +88,12 @@
     transition: all 0.3s ease;
   }
 
-  .light .glass-card-hover {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: 
-      0 4px 30px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  }
-
   .glass-card-hover:hover {
     border-color: rgba(0, 128, 255, 0.3);
     box-shadow: 
       0 8px 40px rgba(0, 128, 255, 0.15),
       inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transform: translateY(-2px);
-  }
-
-  .light .glass-card-hover:hover {
-    border-color: rgba(0, 128, 255, 0.4);
-    box-shadow: 
-      0 8px 40px rgba(0, 128, 255, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
 
   /* Buttons */
