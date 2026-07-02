@@ -61,14 +61,4 @@ export const productsService = {
     const { data } = await apiClient.get<Product[]>('/products/low-stock');
     return data;
   },
-
-  /**
-   * Buscar productos por término
-   */
-  async search(term: string): Promise<Product[]> {
-    const { data } = await apiClient.get<Product[]>('/products/search', {
-      params: { q: term },
-    });
-    return data;
-  },
 };

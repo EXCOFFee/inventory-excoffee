@@ -8,7 +8,6 @@ import {
   StockValuation,
   ProductVelocity,
   StockoutReport,
-  MovementSummary,
   CategorySummary,
   ReportFilters,
 } from '../types';
@@ -82,16 +81,6 @@ export const reportsService = {
   },
 
   /**
-   * Obtener resumen de movimientos por período
-   */
-  async getMovementSummary(filters?: ReportFilters): Promise<MovementSummary[]> {
-    const { data } = await apiClient.get<MovementSummary[]>('/reports/movement-summary', {
-      params: filters,
-    });
-    return data;
-  },
-
-  /**
    * Obtener distribución por categorías.
    * El backend expone `/reports/by-category` con campos `{ id, name, totalProducts, ... }`
    * (ver H-16); mapeamos a `CategorySummary` que consume la UI.
@@ -105,20 +94,5 @@ export const reportsService = {
       totalStock: c.totalStock,
       totalValue: c.totalValue,
     }));
-  },
-
-  /**
-   * Exportar reporte en formato específico
-   */
-  async exportReport(
-    reportType: string,
-    format: 'pdf' | 'excel' | 'csv',
-    filters?: ReportFilters
-  ): Promise<Blob> {
-    const { data } = await apiClient.get(`/reports/export/${reportType}`, {
-      params: { format, ...filters },
-      responseType: 'blob',
-    });
-    return data;
   },
 };
