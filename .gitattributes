@@ -1,0 +1,4 @@
+# Los scripts de shell corren dentro de contenedores Linux: deben checkoutearse SIEMPRE
+# con LF, incluso en Windows (core.autocrlf). Con CRLF el shebang queda "#!/bin/sh\r" y
+# Docker falla con "exec ./docker-entrypoint.sh: no such file or directory" (ver SDD H-18).
+*.sh text eol=lf
