@@ -517,6 +517,14 @@ frontend elimina el bloque `Math.random()` y consume `kpis.movementTrend`.
 
 ---
 
+### H-18 🟢 MENOR — Clone en Windows rompe `docker compose up` (CRLF en los `.sh`)
+Sin `.gitattributes`, `core.autocrlf` checkoutea `backend/docker-entrypoint.sh` con CRLF en
+Windows → el shebang queda `#!/bin/sh\r` y el contenedor `api` entra en restart-loop con
+`exec ./docker-entrypoint.sh: no such file or directory`. **Fix:** `.gitattributes` con
+`*.sh text eol=lf` + renormalización. Descubierto al verificar H-17 contra el stack Docker local.
+
+---
+
 ## 3. Estado objetivo (resumen)
 
 Al terminar, el repo debe cumplir:
