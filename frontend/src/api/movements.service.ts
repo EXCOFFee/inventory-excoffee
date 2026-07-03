@@ -66,14 +66,4 @@ export const movementsService = {
     const { data } = await apiClient.post<Movement>('/movements', movement);
     return data;
   },
-
-  /**
-   * Obtener historial de movimientos recientes
-   */
-  async getRecent(limit: number = 10): Promise<Movement[]> {
-    const { data } = await apiClient.get<Movement[]>('/movements/recent', {
-      params: { limit },
-    });
-    return data;
-  },
 };

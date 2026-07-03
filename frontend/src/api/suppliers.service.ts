@@ -44,7 +44,8 @@ export const suppliersService = {
    * Actualizar proveedor
    */
   async update(id: string, supplier: UpdateSupplierDto): Promise<Supplier> {
-    const { data } = await apiClient.patch<Supplier>(`/suppliers/${id}`, supplier);
+    // El backend expone @Put(':id') para el update (ver H-15); debe ser PUT, no PATCH.
+    const { data } = await apiClient.put<Supplier>(`/suppliers/${id}`, supplier);
     return data;
   },
 

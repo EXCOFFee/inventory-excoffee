@@ -102,6 +102,58 @@ Criterios de aceptación:
 > ⚠️ Esta tarea debe coordinarse con P0-2: si el login pasa a dos pasos, la respuesta del
 > frontend debe manejar también `{ requires2FA: true, twoFactorToken }` (ver contrato 2FA).
 
+### [ ] P0-CONTRACT-A · Reparar el update de entidades (verbo PATCH vs PUT)
+**Ref:** SDD H-15 (mismo patrón que H-08)
+**Archivos:** `frontend/src/api/categories.service.ts`, `products.service.ts`,
+`suppliers.service.ts`, `frontend/src/api/users.service.ts` (extraído de `UsersPage.tsx`)
+
+Pasos:
+1. Cambiar `apiClient.patch('/<entidad>/:id', ...)` → `apiClient.put(...)` en categories,
+   products y suppliers.
+2. Extraer el `usersService` inline de `UsersPage.tsx` a `frontend/src/api/users.service.ts`
+   (consistente con el resto y testeable), con `update` usando `PUT`; exportarlo en `api/index.ts`.
+3. Verificar que el backend expone `@Put(':id')` en los cuatro controllers (fuente de verdad).
+
+Criterios de aceptación:
+- [ ] Smoke test por servicio: `update(id, data)` invoca `apiClient.put` con `/<entidad>/${id}`.
+- [ ] `pnpm build` (tsc) del frontend verde.
+- [ ] Editar categoría/producto/proveedor/usuario funciona de extremo a extremo (sin 404).
+
+### [ ] P0-CONTRACT-B · Reparar dos reportes rotos (rutas inexistentes)
+**Ref:** SDD H-16 (mismo patrón que H-08)
+**Archivo:** `frontend/src/api/reports.service.ts`
+
+Pasos:
+1. `getStockoutReport()`: `/reports/stockouts` → `/reports/low-stock`.
+2. `getCategoryDistribution()`: `/reports/category-distribution` → `/reports/by-category`.
+3. Verificar que el shape que devuelve el backend coincide con el tipo consumido; ajustar si no.
+
+Criterios de aceptación:
+- [ ] Smoke test: ambos métodos pegan a `/reports/low-stock` y `/reports/by-category`.
+- [ ] `ReportsPage` carga sin 404 en consola.
+- [ ] `pnpm build` (tsc) del frontend verde.
+
+### [x] P0-DASHBOARD · Dashboard con datos falsos (contrato desalineado + gráfico random)
+**Ref:** SDD H-17 (espíritu de H-02; familia de contrato H-08/H-15/H-16)
+**Archivos:** `backend/src/modules/reports/reports.service.ts` (`getDashboard`),
+`frontend/src/components/pages/DashboardPage.tsx`
+
+Pasos:
+1. Reescribir `getDashboard` para devolver el contrato `DashboardKPIs` completo: `stockValuation`,
+   `lowStockCount`, `outOfStockCount`, movimientos hoy/mes, `recentAlerts`, `topProducts`,
+   `categoryDistribution` y `movementTrend` real (agrupado por día, últimos 7, rellenando huecos).
+2. Frontend: borrar el bloque `Math.random()` de `DashboardPage` y consumir `kpis.movementTrend`.
+
+Criterios de aceptación:
+- [x] Backend: `getDashboard` devuelve el contrato completo (test en `reports.service.spec`).
+- [x] Frontend: `DashboardPage` alimenta el gráfico con la data real, no aleatoria (test que espía el gráfico).
+- [x] `pnpm build`/`test` verdes en backend y frontend.
+
+> 🔎 Los 4 métodos muertos de la misma auditoría (`movementsService.getRecent`,
+> `productsService.search`, `reportsService.getMovementSummary`, `reportsService.exportReport`)
+> se **BORRARON** (código muerto real; la funcionalidad existe por otro lado o no hace falta).
+> Ver commit de limpieza `chore(frontend): eliminar 4 métodos de service contra rutas inexistentes`.
+
 ## P1 — Credibilidad ante reclutadores
 
 ### [x] P1-LINT · Reparar el lint roto (ESLint v9 sin flat config)

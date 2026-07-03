@@ -8,10 +8,30 @@ import {
   StockValuation,
   ProductVelocity,
   StockoutReport,
-  MovementSummary,
   CategorySummary,
   ReportFilters,
 } from '../types';
+
+// Shapes CRUDOS del backend (ver H-16). Se mapean al tipo que consume la UI para
+// no filtrar la forma interna del backend a los componentes.
+interface RawLowStockProduct {
+  id: string;
+  sku: string;
+  name: string;
+  currentStock: number;
+  minStock: number;
+}
+interface RawLowStockReport {
+  outOfStock: RawLowStockProduct[];
+  lowStock: RawLowStockProduct[];
+}
+interface RawCategoryReport {
+  id: string;
+  name: string;
+  totalProducts: number;
+  totalStock: number;
+  totalValue: number;
+}
 
 export const reportsService = {
   /**
@@ -43,43 +63,36 @@ export const reportsService = {
   },
 
   /**
-   * Obtener reporte de stockouts
+   * Obtener reporte de stock bajo / sin stock.
+   * El backend expone `/reports/low-stock` y devuelve `{ summary, outOfStock, lowStock }`
+   * (ver H-16). Aplanamos ambas listas y las mapeamos al shape que consume la UI.
    */
   async getStockoutReport(): Promise<StockoutReport[]> {
-    const { data } = await apiClient.get<StockoutReport[]>('/reports/stockouts');
-    return data;
+    const { data } = await apiClient.get<RawLowStockReport>('/reports/low-stock');
+    const rows = [...(data.outOfStock ?? []), ...(data.lowStock ?? [])];
+    return rows.map((p) => ({
+      productId: p.id,
+      sku: p.sku,
+      name: p.name,
+      currentStock: p.currentStock,
+      minStock: p.minStock,
+      deficit: Math.max(0, p.minStock - p.currentStock),
+    }));
   },
 
   /**
-   * Obtener resumen de movimientos por período
-   */
-  async getMovementSummary(filters?: ReportFilters): Promise<MovementSummary[]> {
-    const { data } = await apiClient.get<MovementSummary[]>('/reports/movement-summary', {
-      params: filters,
-    });
-    return data;
-  },
-
-  /**
-   * Obtener distribución por categorías
+   * Obtener distribución por categorías.
+   * El backend expone `/reports/by-category` con campos `{ id, name, totalProducts, ... }`
+   * (ver H-16); mapeamos a `CategorySummary` que consume la UI.
    */
   async getCategoryDistribution(): Promise<CategorySummary[]> {
-    const { data } = await apiClient.get<CategorySummary[]>('/reports/category-distribution');
-    return data;
-  },
-
-  /**
-   * Exportar reporte en formato específico
-   */
-  async exportReport(
-    reportType: string,
-    format: 'pdf' | 'excel' | 'csv',
-    filters?: ReportFilters
-  ): Promise<Blob> {
-    const { data } = await apiClient.get(`/reports/export/${reportType}`, {
-      params: { format, ...filters },
-      responseType: 'blob',
-    });
-    return data;
+    const { data } = await apiClient.get<RawCategoryReport[]>('/reports/by-category');
+    return data.map((c) => ({
+      categoryId: c.id,
+      categoryName: c.name,
+      productCount: c.totalProducts,
+      totalStock: c.totalStock,
+      totalValue: c.totalValue,
+    }));
   },
 };

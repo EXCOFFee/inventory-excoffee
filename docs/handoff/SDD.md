@@ -11,7 +11,10 @@ README, alineación SRS↔código. **Auditoría exhaustiva: backend + frontend +
 > **Nota de versión:** Este SDD fue ampliado tras una segunda pasada que cubrió frontend,
 > mobile, tests e infraestructura (hallazgos H-08 a H-13). La primera pasada cubría solo el
 > núcleo crítico del backend (H-01 a H-07). H-14 se añadió durante la ejecución de las
-> tareas P0, al descubrirse deuda preexistente en la configuración de lint.
+> tareas P0, al descubrirse deuda preexistente en la configuración de lint. **H-15, H-16 y H-17
+> se añadieron durante una auditoría de contrato frontend↔backend posterior al deploy cloud, al
+> encontrar el mismo patrón de H-08 replicado en otros módulos (updates, reportes y el dashboard
+> completo).**
 
 ---
 
@@ -416,6 +419,101 @@ muchas, dejarlas como ítem aparte explícito.
 
 **VERIFICACIÓN.** `pnpm lint` ya no falla por ausencia de configuración; el número de
 violaciones restantes (idealmente 0) queda documentado; `pnpm build` sigue verde.
+
+---
+
+### H-15 🔴 CRÍTICO — Editar entidades está roto (mismatch de verbo PATCH vs PUT)
+**Archivos:** `frontend/src/api/categories.service.ts`, `products.service.ts`, `suppliers.service.ts`, y el `usersService` inline en `frontend/src/components/pages/UsersPage.tsx`.
+**Backend:** los controllers exponen `@Put(':id')` para el update de categories, products, suppliers y users.
+**Descubierto durante:** auditoría de contrato frontend↔backend posterior al deploy cloud.
+**Ref:** mismo patrón que **H-08** · TASKS P0-CONTRACT-A.
+
+**QUÉ.** El frontend actualiza con `apiClient.patch('/<entidad>/:id')`, pero el backend registra
+esas rutas con `@Put(':id')`. NestJS mapea `@Put` solo al método HTTP PUT, así que la petición
+PATCH **no matchea ninguna ruta → 404**. Resultado: **crear y borrar funcionan, pero editar
+categorías, productos, proveedores y usuarios falla** desde la UI.
+
+**POR QUÉ importa.** Es el mismo tipo de bug que H-08 (contrato front↔back que no coincide),
+replicado en cuatro pantallas de CRUD. Un reclutador que edite cualquier registro ve un error.
+Cuatro flujos de update caídos degradan fuerte la percepción de un CRUD "completo".
+
+**CÓMO (causa raíz).** El frontend se construyó asumiendo semántica PATCH (update parcial)
+mientras el backend implementó `@Put`. Nadie ejerció el flujo de edición contra el backend real.
+
+**Fix decidido.** Alinear el frontend al backend (fuente de verdad, igual criterio que H-08):
+cambiar `.patch` → `.put` en los cuatro servicios. Se descarta cambiar el backend a `@Patch`
+porque alteraría el contrato/Swagger ya desplegado sin beneficio. Se extrae además el
+`usersService` inline a `frontend/src/api/users.service.ts` para dejarlo consistente y testeable.
+
+**VERIFICACIÓN.**
+- Smoke test por servicio: `update(id, data)` invoca `apiClient.put` con `/<entidad>/${id}`.
+- `pnpm build` (tsc) verde; edición manual de cada entidad funciona de extremo a extremo.
+
+---
+
+### H-16 🟡 IMPORTANTE — Dos reportes rotos por rutas inexistentes
+**Archivo:** `frontend/src/api/reports.service.ts` (consumido por `ReportsPage.tsx`).
+**Backend:** `reports.controller.ts` expone `/reports/low-stock` y `/reports/by-category`.
+**Descubierto durante:** auditoría de contrato frontend↔backend posterior al deploy cloud.
+**Ref:** mismo patrón que **H-08** · TASKS P0-CONTRACT-B.
+
+**QUÉ.** `ReportsPage` llama a `getStockoutReport()` → `GET /reports/stockouts` y a
+`getCategoryDistribution()` → `GET /reports/category-distribution`. Ninguna de esas rutas existe
+en el backend (son `/reports/low-stock` y `/reports/by-category`) → **404**. Los otros tres
+reportes de la página (`dashboard`, `stock-valuation`, `product-velocity`) sí coinciden.
+
+**POR QUÉ importa.** La página de Reportes muestra secciones vacías/erróneas y ensucia la consola
+con 404. Es la misma clase de desalineación de contrato que H-08/H-15.
+
+**CÓMO (causa raíz).** Nombres de ruta divergentes entre el cliente y el controller reales.
+
+**Fix decidido.** Alinear el frontend al backend: `stockouts` → `low-stock`,
+`category-distribution` → `by-category`. (Verificar que el shape de la respuesta del backend
+coincida con el tipo consumido; si no, ajustar el tipo del front.)
+
+**VERIFICACIÓN.**
+- Smoke test: `getStockoutReport()`/`getCategoryDistribution()` pegan a `/reports/low-stock` y
+  `/reports/by-category`.
+- La página de Reportes carga sin 404 en consola.
+
+---
+
+### H-17 🔴 CRÍTICO — El dashboard entero muestra datos falsos (contrato desalineado + gráfico random)
+**Archivos:** `backend/src/modules/reports/reports.service.ts` (`getDashboard`), `frontend/src/components/pages/DashboardPage.tsx`.
+**Frontend espera:** el tipo `DashboardKPIs` (`stockValuation`, conteos, `topProducts`, `categoryDistribution`, `movementTrend`, `recentAlerts`).
+**Descubierto durante:** la implementación del gráfico de tendencia; al investigar, el problema no era solo el gráfico sino **todo** el contrato del dashboard.
+**Ref:** mismo espíritu decorativo que **H-02** (2FA decorativo) + familia de contrato **H-08/H-15/H-16**.
+
+**QUÉ.** `GET /reports/dashboard` devolvía `{ products, inventory, entities, movements }`, pero el
+frontend lee `kpis.stockValuation`, `kpis.lowStockCount`, `kpis.outOfStockCount`, `kpis.topProducts`,
+`kpis.categoryDistribution`, `kpis.movementTrend`, etc. **Ninguno** de esos campos existía en la
+respuesta → todos los KPIs de la primera pantalla caían a `undefined → 0` y las secciones "Productos
+Más Movidos" y "Distribución por Categoría" quedaban vacías. Peor: la "Tendencia de Movimientos" no
+tenía fuente, así que el componente **generaba números aleatorios** (`Math.random()`) en cada carga:
+un gráfico decorativo que mentía.
+
+**POR QUÉ importa.** Es la **primera pantalla** que ve un reclutador, y estaba enteramente vacía/falsa
+no por falta de datos sino por contrato roto. El gráfico con datos inventados es exactamente el tipo
+de "feature decorativa" que H-02 (aparenta funcionar sin hacerlo).
+
+**CÓMO (causa raíz).** El backend `getDashboard` se implementó con una forma distinta a la que la UI
+(más rica) consume, y nunca proveyó `topProducts`/`categoryDistribution`/`movementTrend`; la UI los
+suplía con vacío/aleatorio.
+
+**Fix decidido (enriquecer el backend, back→front).** Excepción consciente al criterio habitual
+front→back (H-08/H-15/H-16): acá el backend era *más pobre* que la UI, así que alinear al revés
+implicaría borrar secciones. `getDashboard` ahora devuelve el contrato `DashboardKPIs` completo:
+`stockValuation`, `lowStockCount`, `outOfStockCount`, movimientos hoy/mes, `recentAlerts` (alertas
+activas), `topProducts` (por cantidad movida en 30 días, con `turnoverRate`), `categoryDistribution`
+y un `movementTrend` **real** agrupado por día (últimos 7 días, rellenando días sin movimientos). El
+frontend elimina el bloque `Math.random()` y consume `kpis.movementTrend`.
+
+**VERIFICACIÓN.**
+- Backend (`reports.service.spec`): `getDashboard` devuelve el contrato completo (valuación, conteos,
+  alertas, `topProducts`, `categoryDistribution` y trend de 7 días).
+- Frontend (`DashboardPage.test`): espía el gráfico y comprueba que recibe la data real de
+  `movementTrend`, no valores aleatorios.
+- `pnpm build`/`test` verdes en backend y frontend.
 
 ---
 

@@ -42,7 +42,8 @@ export const productsService = {
    * Actualizar producto
    */
   async update(id: string, product: UpdateProductDto): Promise<Product> {
-    const { data } = await apiClient.patch<Product>(`/products/${id}`, product);
+    // El backend expone @Put(':id') para el update (ver H-15); debe ser PUT, no PATCH.
+    const { data } = await apiClient.put<Product>(`/products/${id}`, product);
     return data;
   },
 
@@ -58,16 +59,6 @@ export const productsService = {
    */
   async getLowStock(): Promise<Product[]> {
     const { data } = await apiClient.get<Product[]>('/products/low-stock');
-    return data;
-  },
-
-  /**
-   * Buscar productos por término
-   */
-  async search(term: string): Promise<Product[]> {
-    const { data } = await apiClient.get<Product[]>('/products/search', {
-      params: { q: term },
-    });
     return data;
   },
 };

@@ -18,3 +18,8 @@ export {
 export { movementsService } from './movements.service';
 export { alertsService } from './alerts.service';
 export { reportsService } from './reports.service';
+export {
+  usersService,
+  type CreateUserDto,
+  type UpdateUserDto
+} from './users.service';

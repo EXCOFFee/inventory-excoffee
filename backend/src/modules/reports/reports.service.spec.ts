@@ -21,6 +21,7 @@ describe('ReportsService', () => {
     category: { count: jest.fn(), findMany: jest.fn() },
     supplier: { count: jest.fn() },
     movement: { count: jest.fn(), groupBy: jest.fn(), findMany: jest.fn() },
+    stockAlert: { count: jest.fn() },
     // getDashboard cuenta el stock bajo con $queryRaw (filtro SQL).
     $queryRaw: jest.fn(),
   };
@@ -42,32 +43,67 @@ describe('ReportsService', () => {
   });
 
   describe('getDashboard', () => {
-    it('calcula los KPIs (conteos, stock bajo y valorización) correctamente', async () => {
+    it('devuelve el contrato completo que consume el frontend (H-17)', async () => {
       // El orden importa: el servicio dispara las consultas con Promise.all en este orden.
       mockPrismaService.product.count
-        .mockResolvedValueOnce(10) // total
-        .mockResolvedValueOnce(8)  // active
+        .mockResolvedValueOnce(10) // totalProducts
         .mockResolvedValueOnce(2); // outOfStock
-      // stock bajo: ahora se cuenta a nivel SQL con $queryRaw
-      mockPrismaService.$queryRaw.mockResolvedValue([{ count: 1 }]);
-      // findMany ahora solo se usa para la valorización del inventario
-      mockPrismaService.product.findMany.mockResolvedValueOnce([
-        { currentStock: 5, price: 100, cost: 60 },
-        { currentStock: 50, price: 10, cost: 5 },
-      ]);
-      mockPrismaService.category.count.mockResolvedValue(3);
-      mockPrismaService.supplier.count.mockResolvedValue(4);
+      mockPrismaService.$queryRaw.mockResolvedValue([{ count: 3 }]); // stock bajo (SQL)
       mockPrismaService.movement.count
-        .mockResolvedValueOnce(7)  // hoy
-        .mockResolvedValueOnce(20); // mes
+        .mockResolvedValueOnce(7)   // movimientos hoy
+        .mockResolvedValueOnce(20); // movimientos mes
+      mockPrismaService.stockAlert.count.mockResolvedValue(4); // alertas activas
+      mockPrismaService.product.findMany
+        // 1ª llamada: valorización → totalUnits=8, totalValue=5*10+3*20=110
+        .mockResolvedValueOnce([
+          { currentStock: 5, price: 10 },
+          { currentStock: 3, price: 20 },
+        ])
+        // 2ª llamada: detalles del top de productos
+        .mockResolvedValueOnce([
+          { id: 'p1', sku: 'SKU1', name: 'Prod 1', currentStock: 5 },
+        ]);
+      mockPrismaService.category.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'Cat 1',
+          products: [
+            { currentStock: 5, price: 10 },
+            { currentStock: 3, price: 20 },
+          ],
+        },
+      ]);
+      mockPrismaService.movement.groupBy.mockResolvedValue([
+        { productId: 'p1', type: 'IN', _sum: { quantity: 30 } },
+        { productId: 'p1', type: 'OUT', _sum: { quantity: 10 } },
+      ]);
+      mockPrismaService.movement.findMany.mockResolvedValue([
+        { type: 'IN', quantity: 15, createdAt: new Date() },
+        { type: 'OUT', quantity: 5, createdAt: new Date() },
+      ]);
 
       const result = await service.getDashboard();
 
-      expect(result.products).toEqual({ total: 10, active: 8, lowStock: 1, outOfStock: 2 });
-      // value = 5*100 + 50*10 = 1000 ; cost = 5*60 + 50*5 = 550 ; profit = 450
-      expect(result.inventory).toEqual({ totalValue: 1000, totalCost: 550, potentialProfit: 450 });
-      expect(result.entities).toEqual({ categories: 3, suppliers: 4 });
-      expect(result.movements).toEqual({ today: 7, thisMonth: 20 });
+      expect(result.stockValuation).toEqual({
+        totalProducts: 10,
+        totalUnits: 8,
+        totalValue: 110,
+        averageValue: 11,
+      });
+      expect(result.lowStockCount).toBe(3);
+      expect(result.outOfStockCount).toBe(2);
+      expect(result.totalMovementsToday).toBe(7);
+      expect(result.totalMovementsThisMonth).toBe(20);
+      expect(result.recentAlerts).toBe(4);
+      expect(result.categoryDistribution).toEqual([
+        { categoryId: 'c1', categoryName: 'Cat 1', productCount: 2, totalStock: 8, totalValue: 110 },
+      ]);
+      expect(result.topProducts).toEqual([
+        { productId: 'p1', sku: 'SKU1', name: 'Prod 1', totalIn: 30, totalOut: 10, turnoverRate: 2 },
+      ]);
+      // Tendencia: 7 días; el último (hoy) agrega los movimientos mockeados.
+      expect(result.movementTrend).toHaveLength(7);
+      expect(result.movementTrend[6]).toMatchObject({ totalIn: 15, totalOut: 5, netChange: 10 });
     });
   });
 

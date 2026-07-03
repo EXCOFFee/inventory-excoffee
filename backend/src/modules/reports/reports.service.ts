@@ -24,91 +24,168 @@ export class ReportsService {
    * @returns KPIs del inventario
    */
   async getDashboard() {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const now = new Date();
+    const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Ventana de 7 días INCLUYENDO hoy → inicio hace 6 días a las 00:00.
+    const trendStart = new Date();
+    trendStart.setDate(trendStart.getDate() - 6);
+    trendStart.setHours(0, 0, 0, 0);
 
-    // Ejecutar consultas en paralelo para mejor rendimiento
     const [
       totalProducts,
-      activeProducts,
+      outOfStockCount,
       lowStockRows,
-      outOfStockProducts,
-      totalCategories,
-      totalSuppliers,
-      todayMovements,
-      monthMovements,
-      stockValuation,
+      totalMovementsToday,
+      totalMovementsThisMonth,
+      recentAlerts,
+      valuationRows,
+      categories,
+      velocityGroups,
+      trendMovements,
     ] = await Promise.all([
-      // Total de productos
       this.prisma.product.count(),
-      // Productos activos
-      this.prisma.product.count({ where: { isActive: true } }),
-      // Productos con stock bajo, contados a nivel SQL (usa @@index([currentStock])).
-      // Prisma no compara dos columnas con su API fluida → $queryRaw (tagged template, sin
-      // interpolación de strings). Se mantiene la distinción del dashboard: low = stock <= min
-      // y stock > 0 (los de stock 0 cuentan aparte como "sin stock"). Ver ADR-0005 / H-06.
+      this.prisma.product.count({ where: { isActive: true, currentStock: 0 } }),
+      // Stock bajo contado a nivel SQL (usa @@index([current_stock])). Prisma no compara dos
+      // columnas con su API fluida → $queryRaw (tagged template, parametrizado). low = stock
+      // <= min y stock > 0 (los de stock 0 cuentan como "sin stock"). Ver ADR-0005 / H-06.
       this.prisma.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count
         FROM products
         WHERE is_active = true AND current_stock <= min_stock AND current_stock > 0
       `,
-      // Productos sin stock
-      this.prisma.product.count({
-        where: { isActive: true, currentStock: 0 },
-      }),
-      // Total categorías activas
-      this.prisma.category.count({ where: { isActive: true } }),
-      // Total proveedores activos
-      this.prisma.supplier.count({ where: { isActive: true } }),
-      // Movimientos de hoy
-      this.prisma.movement.count({
-        where: { createdAt: { gte: startOfDay } },
-      }),
-      // Movimientos del mes
-      this.prisma.movement.count({
-        where: { createdAt: { gte: startOfMonth } },
-      }),
-      // Valor total del inventario (suma de currentStock * price)
+      this.prisma.movement.count({ where: { createdAt: { gte: startOfDay } } }),
+      this.prisma.movement.count({ where: { createdAt: { gte: startOfMonth } } }),
+      // Alertas "recientes" = activas (no reconocidas).
+      this.prisma.stockAlert.count({ where: { acknowledged: false } }),
+      // Valorización del inventario.
       this.prisma.product.findMany({
         where: { isActive: true },
-        select: { currentStock: true, price: true, cost: true },
+        select: { currentStock: true, price: true },
+      }),
+      // Distribución por categoría (categorías activas + sus productos activos).
+      this.prisma.category.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          products: {
+            where: { isActive: true },
+            select: { currentStock: true, price: true },
+          },
+        },
+      }),
+      // Cantidad movida por producto y tipo (últimos 30 días) para el top de productos.
+      this.prisma.movement.groupBy({
+        by: ['productId', 'type'],
+        where: { createdAt: { gte: thirtyDaysAgo } },
+        _sum: { quantity: true },
+      }),
+      // Movimientos de los últimos 7 días para la tendencia real (antes eran datos random, H-17).
+      this.prisma.movement.findMany({
+        where: { createdAt: { gte: trendStart } },
+        select: { type: true, quantity: true, createdAt: true },
       }),
     ]);
 
-    // El conteo de stock bajo ya viene calculado por la consulta SQL (mismo criterio que antes:
-    // currentStock <= minStock && currentStock > 0).
     const lowStockCount = Number(lowStockRows[0]?.count ?? 0);
 
-    // Calcular valor del inventario
-    const inventoryValue = stockValuation.reduce((sum, p) => {
-      return sum + p.currentStock * Number(p.price);
-    }, 0);
+    // --- Valorización ---
+    const totalUnits = valuationRows.reduce((s, p) => s + p.currentStock, 0);
+    const totalValue = valuationRows.reduce(
+      (s, p) => s + p.currentStock * Number(p.price),
+      0,
+    );
+    const stockValuation = {
+      totalProducts,
+      totalUnits,
+      totalValue,
+      averageValue: totalProducts > 0 ? totalValue / totalProducts : 0,
+    };
 
-    const inventoryCost = stockValuation.reduce((sum, p) => {
-      return sum + p.currentStock * Number(p.cost);
-    }, 0);
+    // --- Distribución por categoría ---
+    const categoryDistribution = categories.map((cat) => ({
+      categoryId: cat.id,
+      categoryName: cat.name,
+      productCount: cat.products.length,
+      totalStock: cat.products.reduce((s, p) => s + p.currentStock, 0),
+      totalValue: cat.products.reduce(
+        (s, p) => s + p.currentStock * Number(p.price),
+        0,
+      ),
+    }));
+
+    // --- Top de productos por cantidad movida (30 días) ---
+    const perProduct = new Map<string, { totalIn: number; totalOut: number }>();
+    for (const g of velocityGroups) {
+      const entry = perProduct.get(g.productId) ?? { totalIn: 0, totalOut: 0 };
+      const qty = g._sum.quantity ?? 0;
+      if (g.type === MovementType.IN) entry.totalIn += qty;
+      else entry.totalOut += qty;
+      perProduct.set(g.productId, entry);
+    }
+    const topIds = [...perProduct.entries()]
+      .sort(
+        (a, b) =>
+          b[1].totalIn + b[1].totalOut - (a[1].totalIn + a[1].totalOut),
+      )
+      .slice(0, 10)
+      .map(([id]) => id);
+    const topDetails = topIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: topIds } },
+          select: { id: true, sku: true, name: true, currentStock: true },
+        })
+      : [];
+    const topProducts = topIds.map((id) => {
+      const p = topDetails.find((d) => d.id === id);
+      const mv = perProduct.get(id) ?? { totalIn: 0, totalOut: 0 };
+      return {
+        productId: id,
+        sku: p?.sku ?? '',
+        name: p?.name ?? '',
+        totalIn: mv.totalIn,
+        totalOut: mv.totalOut,
+        // Rotación aproximada: unidades que salieron sobre el stock actual.
+        turnoverRate:
+          p && p.currentStock > 0 ? mv.totalOut / p.currentStock : 0,
+      };
+    });
+
+    // --- Tendencia de movimientos (7 días, rellenando días sin movimientos) ---
+    const byDay = new Map<string, { totalIn: number; totalOut: number }>();
+    for (const m of trendMovements) {
+      const key = m.createdAt.toISOString().split('T')[0];
+      const entry = byDay.get(key) ?? { totalIn: 0, totalOut: 0 };
+      if (m.type === MovementType.IN) entry.totalIn += m.quantity;
+      else entry.totalOut += m.quantity;
+      byDay.set(key, entry);
+    }
+    const movementTrend = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(trendStart);
+      d.setDate(trendStart.getDate() + i);
+      const key = d.toISOString().split('T')[0];
+      const entry = byDay.get(key) ?? { totalIn: 0, totalOut: 0 };
+      return {
+        date: key,
+        totalIn: entry.totalIn,
+        totalOut: entry.totalOut,
+        netChange: entry.totalIn - entry.totalOut,
+      };
+    });
 
     return {
-      products: {
-        total: totalProducts,
-        active: activeProducts,
-        lowStock: lowStockCount,
-        outOfStock: outOfStockProducts,
-      },
-      inventory: {
-        totalValue: inventoryValue,
-        totalCost: inventoryCost,
-        potentialProfit: inventoryValue - inventoryCost,
-      },
-      entities: {
-        categories: totalCategories,
-        suppliers: totalSuppliers,
-      },
-      movements: {
-        today: todayMovements,
-        thisMonth: monthMovements,
-      },
+      stockValuation,
+      lowStockCount,
+      outOfStockCount,
+      totalMovementsToday,
+      totalMovementsThisMonth,
+      recentAlerts,
+      topProducts,
+      categoryDistribution,
+      movementTrend,
     };
   }
 
