@@ -2,15 +2,6 @@
 
 Sistema de gestión de inventarios avanzado desarrollado con tecnologías modernas para PyMEs.
 
-## 🌐 Demo en vivo
-
-- 🖥️ **Frontend:** https://inventorypro.vercel.app  _(reemplazar con la URL real de Vercel)_
-- 📡 **API / Swagger:** https://inventorypro-api.onrender.com/api/docs  _(reemplazar con la URL real de Render)_
-
-**Credenciales demo:** `admin@inventorypro.com` / `Admin123!` — o `almacen@inventorypro.com` / `Staff123!`
-
-> ⚡ **Primera carga:** el backend está en el free tier de Render y puede tardar **~30 segundos en despertar** en el primer acceso (la pantalla de login lo avisa). Las siguientes peticiones son instantáneas.
-
 ## 🚀 Tecnologías
 
 ### Backend
@@ -240,7 +231,7 @@ Ideal para una demo pública sin instalar nada. Resumen (guía detallada paso a 
 1. **Supabase** (base de datos): crear proyecto y copiar las dos connection strings — *Pooling* (`:6543`, para `DATABASE_URL`) y *Direct* (`:5432`, para `DIRECT_URL`).
 2. **Render** (backend): New → Blueprint (detecta `render.yaml`) o Web Service apuntando a `backend/`. Cargar env vars: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `NODE_ENV=production`. El deploy corre `migrate deploy` + seed y expone el health check en `/health`.
 3. **Vercel** (frontend): Import Project → root `frontend/` (detecta `vercel.json`). Cargar `VITE_API_URL=https://<tu-backend>.onrender.com/api`.
-4. **Post-deploy:** actualizar `CORS_ORIGIN` en Render con la URL real de Vercel, y reemplazar los placeholders de "Demo en vivo" de este README.
+4. **Post-deploy:** actualizar `CORS_ORIGIN` en Render con la URL real de Vercel.
 
 ### Opción B — Producción con Docker (self-hosting)
 ```bash
